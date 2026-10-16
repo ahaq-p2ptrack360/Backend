@@ -16,7 +16,7 @@ class newuser extends Model
         'first_name', 'last_name',
         'company_id', 'bu_id', 'designation_id',
         'name', 'email',
-        'password','two_factor_secret', 'about',  'photo_url','role','type'
+        'password', 'about',  'photo_url','role','type'
     ];
 
     // Other model configurations or relationships can be added here...

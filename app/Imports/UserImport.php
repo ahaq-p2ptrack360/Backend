@@ -85,7 +85,7 @@ class UserImport implements ToModel, WithHeadingRow
         $userName = strtolower($firstName . '.' . $lastName . '.' . mt_rand(100, 9999) . '@gmail.com');
 
         // Send email with credentials
-        $this->sendCredentialsEmail($userEmail, $userName, $password);
+        $this->sendCredentialsEmail($userEmail, $userName);
 
         // Get full name
         $fullName = trim(($row["first_name"] ?? '') . ' ' . ($row["last_name"] ?? ''));
@@ -99,7 +99,6 @@ class UserImport implements ToModel, WithHeadingRow
             'name' => $fullName, // Assuming this is the full name field
             'email' => $userName, // Login username/email
             'password' => $hashedPassword,
-            'two_factor_secret' => $password, // Storing plain password for reference (not recommended for production)
             'about' => $userEmail, // Original email in about field
             'photo_url' => null,
             'role' => $roleId,
@@ -191,12 +190,11 @@ class UserImport implements ToModel, WithHeadingRow
         return $this->rolesCache[$key];
     }
 
-    private function sendCredentialsEmail($toEmail, $username, $password)
+    private function sendCredentialsEmail($toEmail, $username)
     {
         try {
             $data = [
                 'email' => $username,
-                'password' => $password,
             ];
             
             $mailContent = view('mail3', $data)->render();

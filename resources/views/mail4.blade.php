@@ -368,19 +368,8 @@
                                                                                 </td>
                                                                             </tr>
                                                                             <tr>
-                                                                                <td align="left"
-                                                                                    style="font-size:0px;padding:10px 25px;word-break:break-word;">
-                                                                                    <div
-                                                                                        style="font-family:Roboto, Helvetica, Arial, sans-serif;font-size:16px;font-weight:400;line-height:20px;text-align:left;color:#ffffff;">
-                                                                                        <p style="margin: 0;">
-                                                                                            <strong>New Password:
-                                                                                            </strong>{{ $password }}
-
-                                                                                        </p>
-
-                                                                                        {{-- <button style="padding:5px 10px"> Login</button> --}}
-
-                                                                                    </div>
+                                                                                <td align="left" style="font-size:0px;padding:10px 25px;word-break:break-word;">
+                                                                                    <p style="margin:0;color:#ffffff;">For your security, no password is included in this email. <a href="{{ route('password.request') }}" style="color:#ffffff;">Set or reset your password</a>.</p>
                                                                                 </td>
                                                                             </tr>
 

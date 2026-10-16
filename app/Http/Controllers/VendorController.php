@@ -58,7 +58,6 @@ class VendorController extends Controller
         
 //             // Insert user
 //             DB::insert(
-//                 'INSERT INTO users (first_name, last_name, company_id, name, email, about, two_factor_secret, designation_id, bu_id, password, type,role) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?)',
 //                 [
 //                     $data['name'],
 //                     "",
@@ -164,7 +163,7 @@ public function store(Request $request)
         
         // Insert user
         DB::insert(
-            'INSERT INTO users (first_name, last_name, company_id, name, email, about, two_factor_secret, designation_id, bu_id, password, type,role) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?)',
+            'INSERT INTO users (first_name, last_name, company_id, name, email, about, designation_id, bu_id, password, type,role) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?)',
             [
                 $data['name'],
                 "",
@@ -172,7 +171,6 @@ public function store(Request $request)
                 $data['email'],
                 $data['email'],
                 "",
-                $data['password'],
                 "1",
                 $data['bu_id'],
                 $hashedPassword,
@@ -206,7 +204,7 @@ public function store(Request $request)
                 $data['zipcode'],
                 $data['status'],
                 $data['bu_id'],
-                $data['password'],
+                $hashedPassword,
                 $insertedId
             ]
         );
