@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToTenant;
 use App\Traits\ImageTrait;
 use Auth;
 use Eloquent;
@@ -16,9 +17,7 @@ use Illuminate\Notifications\DatabaseNotification;
 use Illuminate\Notifications\DatabaseNotificationCollection;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Carbon;
-use Laravel\Passport\Client;
-use Laravel\Passport\HasApiTokens;
-use Laravel\Passport\Token;
+use Laravel\Sanctum\HasApiTokens;
 use Spatie\Permission\Traits\HasRoles;
 
 /**
@@ -90,7 +89,7 @@ use Spatie\Permission\Traits\HasRoles;
  */
 class User extends Authenticatable
 {
-    use Notifiable, ImageTrait, HasApiTokens, HasRoles, SoftDeletes;
+    use BelongsToTenant, Notifiable, ImageTrait, HasApiTokens, HasRoles, SoftDeletes;
     use ImageTrait {
         deleteImage as traitDeleteImage;
     }

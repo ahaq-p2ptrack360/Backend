@@ -2,6 +2,7 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use App\Events\TicketCreatedNotification;  
@@ -11,7 +12,7 @@ class TicketController extends Controller
 {
     public function index()
     {
-        $tickets = DB::select('SELECT * FROM vw_tickets');
+        $tickets = $this->tenantQuery('vw_tickets')->get();
         return response()->json($tickets);
     }
 
@@ -24,12 +25,9 @@ class TicketController extends Controller
             $requiredFields = [
                 'title',
                 'description', 
-                'company_id',
                 'business_unit_id',
-                'reported_by',
                 'assigned_to',
                 'status_id',
-                'created_by'
             ];
             
             $missingFields = [];
@@ -46,6 +44,12 @@ class TicketController extends Controller
                 ], 400);
             }
             
+            // The authenticated principal is the source of tenant and actor IDs.
+            $principal = Auth::user();
+            $data['company_id'] = $principal->company_id;
+            $data['created_by'] = $principal->id;
+            $data['reported_by'] = $principal->id;
+
             // Sanitize and prepare data
             $title = trim($data['title'] ?? '');
             $description = trim($data['description'] ?? '');
@@ -69,6 +73,27 @@ class TicketController extends Controller
             $email_status = isset($data['email_status']) ? intval($data['email_status']) : 0;
             $allow_quot = isset($data['allow_quot']) ? intval($data['allow_quot']) : 0;
             $assigned_type = trim($data['assigned_type'] ?? 'Individual');
+
+            if ((int) $principal->company_id !== 0) {
+                $businessUnitIsOwned = DB::table('business_units')
+                    ->where('id', $business_unit_id)
+                    ->where('company_id', $company_id)
+                    ->exists();
+                $assigneeIsOwned = $assigned_type === 'Individual'
+                    ? DB::table('users')->where('id', $assigned_to)->where('company_id', $company_id)->exists()
+                    : DB::table('u_group')->where('id', $assigned_to)->where('company_id', $company_id)->exists();
+
+                $relatedRecordsAreOwned = $this->relatedRecordBelongsToTenant('customers', $customer_id)
+                    && $this->relatedRecordBelongsToTenant('vendors', $vendor_id)
+                    && $this->relatedRecordBelongsToTenant('status', $status_id, true)
+                    && $this->relatedRecordBelongsToTenant('types', $sub_type_id, true)
+                    && $this->relatedRecordBelongsToTenant('priority', $priority_id, true)
+                    && $this->relatedRecordBelongsToTenant('impacts', $impact_id, true);
+
+                if (!$businessUnitIsOwned || !$assigneeIsOwned || !$relatedRecordsAreOwned) {
+                    return response()->json(['error' => 'Related records must belong to your company'], 403);
+                }
+            }
             
             // Handle file upload
             $profilePath = null;
@@ -252,11 +277,15 @@ class TicketController extends Controller
 
     public function show($id)
     {
-        $ticket = DB::select('SELECT * FROM vw_tickets WHERE id = ?', [$id]);
+        $ticket = $this->tenantQuery('vw_tickets')->where('id', $id)->get();
         return response()->json($ticket);
     }
     public function show_group($id)
     {
+        if ((int) Auth::user()->company_id !== 0 && !DB::table('u_group')
+            ->where('id', $id)->where('company_id', Auth::user()->company_id)->exists()) {
+            return response()->json(['error' => 'Group not found'], 404);
+        }
         $gu = DB::select('SELECT ug.title,u.id,ug.created_at
         FROM bu_group_members m
         INNER JOIN u_group ug
@@ -268,13 +297,23 @@ class TicketController extends Controller
     }
     public function bu_fields($id)
     {
+        if (!DB::table('business_units')->where('id', $id)
+            ->when((int) Auth::user()->company_id !== 0, function ($query) {
+                $query->where('company_id', Auth::user()->company_id);
+            })->exists()) {
+            return response()->json(['error' => 'Business unit not found'], 404);
+        }
         $ticket = DB::select('SELECT * FROM `bu_fields` WHERE bu_id=?', [$id]);
         return response()->json($ticket);
     }
 
     public function companywise($id)
     {
-        $tickets = DB::select('SELECT * FROM vw_tickets WHERE company_id = ? and active=1', [$id]);
+        if ((int) Auth::user()->company_id !== 0 && (int) $id !== (int) Auth::user()->company_id) {
+            return response()->json(['error' => 'Forbidden'], 403);
+        }
+
+        $tickets = $this->tenantQuery('vw_tickets')->where('company_id', $id)->where('active', 1)->get();
         
         // foreach($tickets as $ticket) {
         //     $quotations = DB::select('SELECT * FROM qoutations WHERE ticket_id = ?', [$ticket->id]);
@@ -286,6 +325,9 @@ class TicketController extends Controller
 
     public function ticket_activity($id)
     {
+        if (!$this->ticketBelongsToTenant($id)) {
+            return response()->json(['error' => 'Ticket not found'], 404);
+        }
         $tickets = DB::select('SELECT * FROM ticket_activity where ticket_id = ?', [$id]);
         return response()->json($tickets);
     }
@@ -307,7 +349,29 @@ class TicketController extends Controller
             $data = $request->all();
             
             // Get old ticket data before update
-            $oldTicket = DB::table('tickets')->where('id', $id)->first();
+            $oldTicket = $this->tenantQuery('tickets')->where('id', $id)->first();
+            if (!$oldTicket) {
+                return response()->json(['error' => 'Ticket not found'], 404);
+            }
+
+            $principal = Auth::user();
+            $data['created_by'] = $principal->id;
+            $data['reported_by'] = $principal->id;
+            if ((int) $principal->company_id !== 0) {
+                $businessUnitIsOwned = DB::table('business_units')->where('id', $data['business_unit_id'] ?? 0)
+                    ->where('company_id', $principal->company_id)->exists();
+                $assigneeIsOwned = DB::table('users')->where('id', $data['assigned_to'] ?? 0)
+                    ->where('company_id', $principal->company_id)->exists();
+                $relatedRecordsAreOwned = $this->relatedRecordBelongsToTenant('customers', $data['customer_id'] ?? null)
+                    && $this->relatedRecordBelongsToTenant('vendors', $data['vendor_id'] ?? null)
+                    && $this->relatedRecordBelongsToTenant('status', $data['status_id'] ?? null, true)
+                    && $this->relatedRecordBelongsToTenant('types', $data['sub_type_id'] ?? null, true)
+                    && $this->relatedRecordBelongsToTenant('priority', $data['priority_id'] ?? null, true)
+                    && $this->relatedRecordBelongsToTenant('impacts', $data['impact_id'] ?? null, true);
+                if (!$businessUnitIsOwned || !$assigneeIsOwned || !$relatedRecordsAreOwned) {
+                    return response()->json(['error' => 'Related records must belong to your company'], 403);
+                }
+            }
             
             // 🔥 FIX DATE FORMAT ISSUE 🔥
             // Convert completed_date to YYYY-MM-DD format
@@ -333,7 +397,7 @@ class TicketController extends Controller
             }
             
             // Update ticket with converted dates
-            DB::update('UPDATE tickets SET title = ?, description = ?, completed_date = ?, due_date = ?, completed_by = ?, business_unit_id = ?, customer_id = ?, reported_by = ?, assigned_to = ?, mode_of_complaint = ?, sub_type_id = ?, priority_id = ?, impact_id = ?, status_id = ?, store_contact = ? WHERE id = ?',
+            DB::update('UPDATE tickets SET title = ?, description = ?, completed_date = ?, due_date = ?, completed_by = ?, business_unit_id = ?, customer_id = ?, reported_by = ?, assigned_to = ?, mode_of_complaint = ?, sub_type_id = ?, priority_id = ?, impact_id = ?, status_id = ?, store_contact = ? WHERE id = ? AND company_id = ?',
                 [
                     $data['title'], 
                     $data['description'], 
@@ -350,12 +414,13 @@ class TicketController extends Controller
                     $data['impact_id'], 
                     $data['status_id'], 
                     $data['store_contact'], 
-                    $id
+                    $id,
+                    $oldTicket->company_id
                 ]
             );
             
             // Get updated ticket data
-            $updatedTicket = DB::table('tickets')->where('id', $id)->first();
+            $updatedTicket = $this->tenantQuery('tickets')->where('id', $id)->first();
             
             // Track what fields were changed
             $changedFields = [];
@@ -377,11 +442,11 @@ class TicketController extends Controller
             }
             
             // Get user who performed the update
-            $user = DB::table('users')->where('id', $data['created_by'])->first();
+            $user = DB::table('users')->where('id', $principal->id)->first();
             $userName = $user->name ?? $user->first_name ?? 'A user';
             
             // 🔔 FIRE NOTIFICATION EVENT WITH COMPANY ID 🔔
-            $companyId = $data['company_id'] ?? $oldTicket->company_id ?? null;
+            $companyId = $oldTicket->company_id;
             event(new TicketUpdatedNotification($updatedTicket, $userName, $changedFields, $companyId));
             \Log::info('Ticket update notification fired', [
                 'ticket_id' => $id, 
@@ -405,7 +470,10 @@ class TicketController extends Controller
 
     public function destroy($id)
     {
-        DB::delete('DELETE FROM tickets WHERE id = ?', [$id]);
+        $deleted = $this->tenantQuery('tickets')->where('id', $id)->delete();
+        if (!$deleted) {
+            return response()->json(['error' => 'Ticket not found'], 404);
+        }
         return response()->json(['message' => 'Ticket deleted successfully']);
     }
 
@@ -413,8 +481,12 @@ class TicketController extends Controller
     {
         $data = $request->all();
 
+        if (!$this->ticketBelongsToTenant($data['ticket_id'] ?? null)) {
+            return response()->json(['error' => 'Ticket not found'], 404);
+        }
+
         DB::insert('INSERT INTO `ticket_activity`(`remarks`,`ticket_id`, `created_by`)  VALUES ( ?, ?, ?)',
-            [$data['remarks'], $data['ticket_id'], $data['created_by']]);
+            [$data['remarks'], $data['ticket_id'], Auth::id()]);
 
         return response()->json(['message' => 'Ticket created successfully']);
     }
@@ -423,8 +495,16 @@ class TicketController extends Controller
     {
         $data = $request->all();
 
-        DB::update('UPDATE tickets SET vendor_id = ? WHERE id = ?',
-            [$data['vendor_id'], $id]);
+        if (!$this->ticketBelongsToTenant($id)) {
+            return response()->json(['error' => 'Ticket not found'], 404);
+        }
+
+        if ((int) Auth::user()->company_id !== 0 && !DB::table('vendors')->where('id', $data['vendor_id'] ?? 0)
+            ->where('company_id', Auth::user()->company_id)->exists()) {
+            return response()->json(['error' => 'Vendor not found'], 404);
+        }
+
+        $this->tenantQuery('tickets')->where('id', $id)->update(['vendor_id' => $data['vendor_id']]);
 
         return response()->json(['message' => 'Vendor updated successfully']);
     }
@@ -433,13 +513,25 @@ class TicketController extends Controller
     {
         $data = $request->all();
 
+        if (!$this->ticketBelongsToTenant($data['ticket_id'] ?? null)) {
+            return response()->json(['error' => 'Ticket not found'], 404);
+        }
+
+        if ((int) Auth::user()->company_id !== 0 && !DB::table('vendors')->where('id', $data['vendor_id'] ?? 0)
+            ->where('company_id', Auth::user()->company_id)->exists()) {
+            return response()->json(['error' => 'Vendor not found'], 404);
+        }
+
         DB::insert('INSERT INTO `qoutations`(`company_id`,`ticket_id`, `vendor_id`,`amount`,`description`)  VALUES (?, ?, ?,?,?)',
-            [$data['company_id'], $data['ticket_id'], $data['vendor_id'], $data['amount'], $data['remarks']]);
+            [Auth::user()->company_id, $data['ticket_id'], $data['vendor_id'], $data['amount'], $data['remarks']]);
 
         return response()->json(['message' => 'Qutation created successfully']);
     }
     public function showQuotation($id)
     {
+        if (!$this->ticketBelongsToTenant($id)) {
+            return response()->json(['error' => 'Ticket not found'], 404);
+        }
         $ticket = DB::select('SELECT * FROM `vw_quote` WHERE ticket_id = ?', [$id]);
         return response()->json($ticket);
     }
@@ -447,8 +539,15 @@ class TicketController extends Controller
     {
         $data = $request->all();
 
-        DB::update('UPDATE qoutations SET approved_amount = ?, actual_amount = ? WHERE id = ?',
-            [$data['approved_amount'], $data['actual_amount'], $id]);
+        $quotation = DB::table('qoutations')->where('id', $id);
+        if ((int) Auth::user()->company_id !== 0) {
+            $quotation->where('company_id', Auth::user()->company_id);
+        }
+        if (!$quotation->exists()) {
+            return response()->json(['error' => 'Quotation not found'], 404);
+        }
+
+        $quotation->update(['approved_amount' => $data['approved_amount'], 'actual_amount' => $data['actual_amount']]);
 
         return response()->json(['message' => 'Amount updated successfully']);
     }
@@ -457,8 +556,7 @@ class TicketController extends Controller
     {
         $data = $request->all();
 
-        DB::update('UPDATE `tickets` SET `status_id`=? WHERE id=?',
-            [$data['status'], $data['id']]);
+        $this->tenantQuery('tickets')->where('id', $data['id'])->update(['status_id' => $data['status']]);
 
         return response()->json(['message' => 'Status updated successfully']);
     }
@@ -466,28 +564,25 @@ class TicketController extends Controller
     public function updatetickstatus(Request $request)
     {
         $data = $request->all();
-        DB::update('UPDATE tickets SET active = ? WHERE id = ?', [
-            $data['active'],
-            $data['id'],
-
-        ]);
+        $this->tenantQuery('tickets')->where('id', $data['id'])->update(['active' => $data['active']]);
         return response()->json(['message' => 'Type status updated successfully']);
     }
     public function showticketbyvendor($id)
     {
         // Get the vendor by ID
-        $vendors = DB::select('SELECT * FROM `vendors` v WHERE v.userId = ?', [$id]);
+        $vendorQuery = DB::table('vendors')->where('userId', $id);
+        if ((int) Auth::user()->company_id !== 0) {
+            $vendorQuery->where('company_id', Auth::user()->company_id);
+        }
+        $vendor = $vendorQuery->first();
 
         // Check if vendor exists
-        if (empty($vendors)) {
+        if (!$vendor) {
             return response()->json(['error' => 'Vendor not found'], 404);
         }
 
-        // Get the first vendor
-        $vendor = $vendors[0];
-
         // Now fetch tickets based on vendor_type_id
-        $tickets = DB::select('SELECT
+        $sql = 'SELECT
     t.*,
     q.id AS quote_id,
     q.amount
@@ -495,7 +590,13 @@ FROM vw_tickets t
 LEFT JOIN qoutations q
     ON t.id = q.ticket_id AND q.vendor_id = ?
 WHERE t.allow_qutation = 1
-  AND t.sub_type_id = ?;', [$id, $vendor->vendor_type_id]);
+  AND t.sub_type_id = ?';
+        $bindings = [$id, $vendor->vendor_type_id];
+        if ((int) Auth::user()->company_id !== 0) {
+            $sql .= ' AND t.company_id = ?';
+            $bindings[] = Auth::user()->company_id;
+        }
+        $tickets = DB::select($sql, $bindings);
 
         return response()->json($tickets);
     }
@@ -503,10 +604,14 @@ WHERE t.allow_qutation = 1
     {
         $data = $request->all();
 
+        if (!$this->ticketBelongsToTenant($data['ticket_id'] ?? null)) {
+            return response()->json(['error' => 'Ticket not found'], 404);
+        }
+
         DB::insert('INSERT INTO `ticket_reply` (`message`, `ticket_id`, `created_by`) VALUES (?, ?, ?)', [
             $data['message'],
             $data['ticket_id'],
-           $data['created_by'] // Hardcoded created_by = 0
+            Auth::id(),
         ]);
 
         return response()->json(['success' => 'Reply added successfully']);
@@ -514,6 +619,9 @@ WHERE t.allow_qutation = 1
 
     public function get_ticket_reply($id)
     {
+        if (!$this->ticketBelongsToTenant($id)) {
+            return response()->json(['error' => 'Ticket not found'], 404);
+        }
         $ticket = DB::select('
         SELECT tr.*, t.title ,u.first_name as name
         FROM `ticket_reply` tr
@@ -525,4 +633,44 @@ join users u on tr.created_by =u.id
         return response()->json($ticket);
     }
 
+
+    private function tenantQuery($table)
+    {
+        $query = DB::table($table);
+        $user = Auth::user();
+
+        if ($user && (int) $user->company_id !== 0) {
+            $query->where($table . '.company_id', $user->company_id);
+        }
+
+        return $query;
+    }
+
+    private function ticketBelongsToTenant($ticketId)
+    {
+        if (!$ticketId) {
+            return false;
+        }
+
+        return $this->tenantQuery('tickets')->where('tickets.id', $ticketId)->exists();
+    }
+
+    private function relatedRecordBelongsToTenant($table, $id, $allowSystemRecord = false)
+    {
+        if (!$id) {
+            return true;
+        }
+
+        $companyId = Auth::user()->company_id;
+        $query = DB::table($table)->where('id', $id);
+        if ($allowSystemRecord) {
+            $query->whereIn('company_id', [$companyId, 0]);
+        } else {
+            $query->where('company_id', $companyId);
+        }
+
+        return $query->exists();
+    }
 }
+
+

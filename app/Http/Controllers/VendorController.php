@@ -4,13 +4,20 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 class VendorController extends Controller
 {
     public function index()
     {
-        $vendors = DB::select('SELECT s.*,IFNULL(c.name,"System") as company FROM `vendors` s left join company c on s.company_id = c.id where s.active =1;');
+        $sql = 'SELECT s.*,IFNULL(c.name,"System") as company FROM `vendors` s left join company c on s.company_id = c.id where s.active =1';
+        $bindings = [];
+        if ($this->tenantCompanyId() !== null) {
+            $sql .= ' AND s.company_id = ?';
+            $bindings[] = $this->tenantCompanyId();
+        }
+        $vendors = DB::select($sql, $bindings);
         return response()->json($vendors);
     }
 
@@ -110,6 +117,7 @@ class VendorController extends Controller
 public function store(Request $request)
 {
     $data = $request->all();
+        $data['company_id'] = $this->tenantCompanyId() ?? ($data['company_id'] ?? null);
     
     DB::beginTransaction();
     
@@ -214,13 +222,23 @@ public function store(Request $request)
 
     public function show($id)
     {
-        $vendor = DB::select('SELECT * FROM vendors WHERE id = ?', [$id]);
+        $query = DB::table('vendors')->where('id', $id);
+        if ($this->tenantCompanyId() !== null) {
+            $query->where('company_id', $this->tenantCompanyId());
+        }
+        $vendor = $query->get();
         return response()->json($vendor);
     }
 
     public function showbytype($id)
     {
-        $vendor = DB::select('SELECT v.*,c.name as company,b.name as business_units FROM vendors v left join company c on v.company_id = c.id left join business_units b on v.bu_id = b.id WHERE vendor_type_id = ? ', [$id]);
+        $sql = 'SELECT v.*,c.name as company,b.name as business_units FROM vendors v left join company c on v.company_id = c.id left join business_units b on v.bu_id = b.id WHERE vendor_type_id = ?';
+        $bindings = [$id];
+        if ($this->tenantCompanyId() !== null) {
+            $sql .= ' AND v.company_id = ?';
+            $bindings[] = $this->tenantCompanyId();
+        }
+        $vendor = DB::select($sql, $bindings);
         return response()->json($vendor);
     }
 
@@ -238,6 +256,7 @@ public function store(Request $request)
     public function update(Request $request, $id)
 {
     $data = $request->all();
+        $data['company_id'] = $this->tenantCompanyId() ?? ($data['company_id'] ?? null);
     
     // YEH VALIDATION ADD KARO - LINE 88 KE BAAD
     if (!isset($data['company_id'])) {
@@ -249,8 +268,8 @@ public function store(Request $request)
     
     // Baaki update code same rakho
     DB::update(
-        'UPDATE vendors SET company_id = ?, vendor_type_id = ?, name = ?, email = ?, phone = ?, alternate_phone = ?, address_1 = ?, address_2 = ?, latitude = ?, longitude = ?, city = ?, state = ?, country = ?, zipcode = ?, status = ?, bu_id = ? WHERE id = ?',
-        [$data['company_id'], $data['vendor_type_id'], $data['name'], $data['email'], $data['phone'], $data['alternate_phone'], $data['address_1'], $data['address_2'], $data['latitude'], $data['longitude'], $data['city'], $data['state'], $data['country'], $data['zipcode'], $data['status'], $data['bu_id'], $id]
+        'UPDATE vendors SET company_id = ?, vendor_type_id = ?, name = ?, email = ?, phone = ?, alternate_phone = ?, address_1 = ?, address_2 = ?, latitude = ?, longitude = ?, city = ?, state = ?, country = ?, zipcode = ?, status = ?, bu_id = ? WHERE id = ? AND company_id = ?',
+        [$data['company_id'], $data['vendor_type_id'], $data['name'], $data['email'], $data['phone'], $data['alternate_phone'], $data['address_1'], $data['address_2'], $data['latitude'], $data['longitude'], $data['city'], $data['state'], $data['country'], $data['zipcode'], $data['status'], $data['bu_id'], $id, $data['company_id']]
     );
 
     return response()->json(['message' => 'Vendor updated successfully']);
@@ -258,28 +277,37 @@ public function store(Request $request)
 
     public function companywise($id)
     {
+        $id = $this->tenantCompanyId() ?? $id;
         $vendor = DB::select('SELECT s.*,IFNULL(c.name,"System") as company FROM `vendors` s left join company c on s.company_id = c.id WHERE company_id = ? and  s.active =1', [$id]);
         return response()->json($vendor);
     }
 
     public function destroy($id)
     {
-        DB::delete('DELETE FROM vendors WHERE id = ?', [$id]);
+        $query = DB::table('vendors')->where('id', $id);
+        if ($this->tenantCompanyId() !== null) {
+            $query->where('company_id', $this->tenantCompanyId());
+        }
+        $query->delete();
         return response()->json(['message' => 'Vendor deleted successfully']);
     }
     public function updatevendorstatus(Request $request)
     {
         $data = $request->all();
-        DB::update('UPDATE vendors SET active = ? WHERE id = ?', [
-            $data['active'],
-            $data['id']
-
-        ]);
+        $query = DB::table('vendors')->where('id', $data['id']);
+        if ($this->tenantCompanyId() !== null) {
+            $query->where('company_id', $this->tenantCompanyId());
+        }
+        $query->update(['active' => $data['active']]);
         return response()->json(['message' => 'Type status updated successfully']);
     }
     public function storevendor_tickets(Request $request)
     {
         $data = $request->all();
+        if (!$this->ticketBelongsToTenant($data['ticket_id'] ?? null)
+            || !$this->vendorBelongsToTenant($data['vendor_id'] ?? null)) {
+            return response()->json(['error' => 'Ticket or vendor not found'], 404);
+        }
         // You need to adjust the field names according to your table structure
         DB::insert('INSERT INTO `vendor_tickets`(`ticket_id`, `vendor_id`, `status`) VALUES (?,?,?)', [
             $data['ticket_id'],
@@ -294,27 +322,52 @@ public function store(Request $request)
 
     public function showvt($id)
     {
-        $vendor = DB::select('SELECT t.*,q.amount,vt.id as vid ,vt.vendor_id  as vendorId FROM vendor_tickets vt join vw_tickets t on t.id = vt.ticket_id left join qoutations q on vt.ticket_id =q.ticket_id WHERE vt.id = ? and vt.status =1', [$id]);
+        $sql = 'SELECT t.*,q.amount,vt.id as vid ,vt.vendor_id as vendorId FROM vendor_tickets vt join vw_tickets t on t.id = vt.ticket_id left join qoutations q on vt.ticket_id =q.ticket_id WHERE vt.id = ? and vt.status =1';
+        $bindings = [$id];
+        if ($this->tenantCompanyId() !== null) {
+            $sql .= ' AND t.company_id = ?';
+            $bindings[] = $this->tenantCompanyId();
+        }
+        $vendor = DB::select($sql, $bindings);
         return response()->json($vendor);
     }
     public function vendorbytype($id)
     {
-        $vendor = DB::select('SELECT * from vendors where vendor_type_id=?', [$id]);
+        $sql = 'SELECT * from vendors where vendor_type_id=?';
+        $bindings = [$id];
+        if ($this->tenantCompanyId() !== null) {
+            $sql .= ' AND company_id = ?';
+            $bindings[] = $this->tenantCompanyId();
+        }
+        $vendor = DB::select($sql, $bindings);
         return response()->json($vendor);
     }
     public function qutationsbyticket($id)
     {
-        $vendor = DB::select('SELECT q.*,v.name as vendor from qoutations q join vendors v on q.vendor_id = v.id where ticket_id=?', [$id]);
+        if (!$this->ticketBelongsToTenant($id)) {
+            return response()->json(['error' => 'Ticket not found'], 404);
+        }
+        $sql = 'SELECT q.*,v.name as vendor from qoutations q join vendors v on q.vendor_id = v.id where ticket_id=?';
+        $bindings = [$id];
+        if ($this->tenantCompanyId() !== null) {
+            $sql .= ' AND q.company_id = ?';
+            $bindings[] = $this->tenantCompanyId();
+        }
+        $vendor = DB::select($sql, $bindings);
         return response()->json($vendor);
     }
     public function sendemailtovendor($vid, $tid)
 {
     // Get vendor and ticket data
-    $vendor = DB::select('SELECT * FROM vendors WHERE id = ?', [$vid]);
-    $ticket = DB::select('SELECT * FROM tickets WHERE id = ?', [$tid]);
+        $vendor = DB::table('vendors')->where('id', $vid)->when($this->tenantCompanyId() !== null, function ($query) {
+            $query->where('company_id', $this->tenantCompanyId());
+        })->get();
+        $ticket = DB::table('tickets')->where('id', $tid)->when($this->tenantCompanyId() !== null, function ($query) {
+            $query->where('company_id', $this->tenantCompanyId());
+        })->get();
 
     // Check if both exist
-    if (empty($vendor) || empty($ticket)) {
+    if ($vendor->isEmpty() || $ticket->isEmpty()) {
         return response()->json(['error' => 'Vendor or Ticket not found'], 404);
     }
 
@@ -369,4 +422,30 @@ public function store(Request $request)
 
     return response()->json(['success' => 'Email sent to vendor successfully']);
 }
+
+    private function tenantCompanyId()
+    {
+        $request = app('request');
+        return $request->attributes->get('tenant_platform_admin')
+            ? null
+            : $request->attributes->get('tenant_company_id');
+    }
+
+    private function ticketBelongsToTenant($ticketId)
+    {
+        $query = DB::table('tickets')->where('id', $ticketId);
+        if ($this->tenantCompanyId() !== null) {
+            $query->where('company_id', $this->tenantCompanyId());
+        }
+        return $query->exists();
+    }
+
+    private function vendorBelongsToTenant($vendorId)
+    {
+        $query = DB::table('vendors')->where('id', $vendorId);
+        if ($this->tenantCompanyId() !== null) {
+            $query->where('company_id', $this->tenantCompanyId());
+        }
+        return $query->exists();
+    }
 }

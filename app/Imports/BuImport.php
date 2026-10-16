@@ -19,7 +19,7 @@ class BuImport implements ToModel,WithHeadingRow
     {
         //  dd($row["name"]);
       
-        $company =DB::select('SELECT * FROM `company` WHERE name= "'.$row["company"].'"');
+        $company = DB::select('SELECT * FROM `company` WHERE name = ?', [$row['company']]);
 
        
         foreach ($row as &$value) {
@@ -49,7 +49,6 @@ class BuImport implements ToModel,WithHeadingRow
 
         ]);
 
-        // $bu_id=DB::select('SELECT * FROM `business_units` WHERE company_id='.$row["company_id"].' And name="'.$row["name"].'"');
 
         //     DB::insert('INSERT INTO `bu_group`(`title`, `bu_id`, `company_id`, `created_by`) VALUES(?,?,?,?)',['Manager'],[$bu_id[0]->id],[$row["company_id"]],[$row["bu_user"]] );
         //     DB::insert('INSERT INTO `bu_group`(`title`, `bu_id`, `company_id`, `created_by`) VALUES(?,?,?,?)',['Staff'],[$bu_id[0]->id],[$row["company_id"]],[$row["bu_user"]] );

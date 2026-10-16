@@ -14,6 +14,12 @@ class DashboardController extends Controller
 
     public function index($c_id, $group, $bu_id, $user_id)
     {
+        $principal = Auth::user();
+        if ($principal && (int) $principal->company_id !== 0) {
+            $c_id = $principal->company_id;
+            $bu_id = $principal->bu_id;
+            $user_id = $principal->id;
+        }
 
         if ($group == 'Manager') {
 
@@ -24,11 +30,12 @@ class DashboardController extends Controller
                 $all_bus = $bu_ids[0]->ids . ', ' . $bu_id;
             }
 
-            $length = Str::length($all_bus);
-
-            // echo $all_bus;
-            // echo "SELECT * FROM `vw_tickets` where company_id = ".$c_id." and business_unit_id IN (".$all_bus.");";
-            $total_tickets = DB::select("SELECT * FROM `vw_tickets` where company_id = " . $c_id . " and business_unit_id IN (" . $all_bus . ") and active=1;");
+            $businessUnitIds = array_map('intval', array_filter(explode(',', (string) $all_bus), 'strlen'));
+            $total_tickets = DB::table('vw_tickets')
+                ->where('company_id', $c_id)
+                ->whereIn('business_unit_id', $businessUnitIds)
+                ->where('active', 1)
+                ->get();
             return response()->json($total_tickets);
         } else {
             $total_tickets = DB::select("SELECT * FROM `vw_tickets` where company_id = ? and business_unit_id = ? and (created_by = ? or assigned_to = ? and active=1)", [$c_id, $bu_id, $user_id, $user_id]);
@@ -43,7 +50,6 @@ class DashboardController extends Controller
 
     //     if ($groups[0]->members != null ) {
 
-    //         $total_tickets = DB::select("SELECT * from tickets where created_by IN(".$id.$groups[0]->members.")");
            
     //         return response()->json($total_tickets);
     //     } else {
@@ -67,7 +73,6 @@ class DashboardController extends Controller
 
 //     if (!empty($groups) && $groups[0]->members != null ) {
 
-//         $total_tickets = DB::select("SELECT * from tickets where created_by IN(".$id.",".$groups[0]->members.")");
        
 //         return response()->json($total_tickets);
 
@@ -81,6 +86,11 @@ class DashboardController extends Controller
 
 public function getallickets($id)
 {
+    $principal = Auth::user();
+    if ($principal && (int) $principal->company_id !== 0) {
+        $id = $principal->id;
+    }
+
     $user = DB::table('users')->where('id', $id)->first(['company_id', 'id']);
     
     if (!$user) {
@@ -88,7 +98,7 @@ public function getallickets($id)
     }
     
     // Super Admin 
-    if ($user->company_id == 0 || $user->id == 1) {
+    if ($principal && (int) $principal->company_id === 0) {
         $total_tickets = DB::select("
             SELECT t.*, 
                    s.title as status_title,
@@ -115,9 +125,7 @@ public function getallickets($id)
         return response()->json($total_tickets);
     }
     
-    // ✅ NORMAL USER - Sirf uski company ki tickets
-    $total_tickets = DB::select("
-        SELECT t.*, 
+    $total_tickets = DB::select("SELECT t.*, 
                s.title as status_title,
                p.title as priority_title,
                i.title as impact_title,
@@ -138,8 +146,7 @@ public function getallickets($id)
         LEFT JOIN types ty ON t.sub_type_id = ty.id
         LEFT JOIN company c ON t.company_id = c.id
         WHERE t.deleted_at IS NULL
-        AND t.company_id = ?  -- ✅ Sirf user ki company ki tickets
-    ", [$user->company_id]);
+        AND t.company_id = ?", [$user->company_id]);
     
     return response()->json($total_tickets);
 }
@@ -147,35 +154,52 @@ public function getallickets($id)
 
     public function get_customers_wise_t($c_id, $bu_id, $cus_id)
     {
+        $c_id = $this->tenantCompanyId($c_id);
         $total_tickets = DB::select("SELECT * FROM `vw_tickets` WHERE company_id=? and business_unit_id =? and cus_id =? and active=1", [$c_id, $bu_id, $cus_id]);
         return response()->json($total_tickets);
     }
     public function get_customers($c_id)
     {
-        $total_tickets = DB::select("SELECT * FROM `customers` WHERE bu_id=?", [$c_id]);
+        $companyId = $this->tenantCompanyId(null);
+        $sql = 'SELECT * FROM `customers` WHERE bu_id = ?';
+        $bindings = [$c_id];
+        if ($companyId !== null) {
+            $sql .= ' AND company_id = ?';
+            $bindings[] = $companyId;
+        }
+        $total_tickets = DB::select($sql, $bindings);
         return response()->json($total_tickets);
     }
 
     public function company_wise_dashboard($c_id)
     {
+        $c_id = $this->tenantCompanyId($c_id);
         $total_tickets = DB::select("SELECT * FROM `vw_tickets` where company_id = ? and active=1", [$c_id]);
         return response()->json($total_tickets);
     }
     public function created_by_t($u_id,$id)
     {   
+        $user = Auth::user();
+        if ($user && (int) $user->company_id !== 0) {
+            $u_id = $user->id;
+        }
+        $companyId = $this->tenantCompanyId(null);
+        $companyClause = $companyId === null ? '' : ' AND company_id = ?';
         if($id == 1){
-        $total_tickets = DB::select("SELECT * FROM `vw_tickets` WHERE reported_by = ? and active=1 ", [$u_id]);
+        $total_tickets = DB::select("SELECT * FROM `vw_tickets` WHERE reported_by = ? and active=1" . $companyClause, $companyId === null ? [$u_id] : [$u_id, $companyId]);
         return response()->json($total_tickets);
         }else if ($id == 2){
-            $total_tickets = DB::select("SELECT * FROM `vw_tickets` WHERE assigned_to =? and active=1", [$u_id]);
+            $total_tickets = DB::select("SELECT * FROM `vw_tickets` WHERE assigned_to =? and active=1" . $companyClause, $companyId === null ? [$u_id] : [$u_id, $companyId]);
             return response()->json($total_tickets);
         }else{
-            $total_tickets = DB::select("SELECT * FROM `vw_tickets` and active=1");
+            $sql = 'SELECT * FROM `vw_tickets` WHERE active=1' . $companyClause;
+            $total_tickets = DB::select($sql, $companyId === null ? [] : [$companyId]);
             return response()->json($total_tickets); 
         }
     }
     public function assign_to_me($u_id)
     {
+        $u_id = Auth::id();
         $total_tickets = DB::select("SELECT * FROM `vw_tickets` WHERE assigned_to =? and active=1", [$u_id]);
         return response()->json($total_tickets);
     }
@@ -183,17 +207,26 @@ public function getallickets($id)
 
     public function super_admin_tickets()
     {
-        $total_tickets = DB::select("SELECT * FROM vw_tickets where active=1");
+        $companyId = $this->tenantCompanyId(null);
+        $sql = 'SELECT * FROM vw_tickets where active=1';
+        $bindings = [];
+        if ($companyId !== null) {
+            $sql .= ' AND company_id = ?';
+            $bindings[] = $companyId;
+        }
+        $total_tickets = DB::select($sql, $bindings);
         return response()->json($total_tickets);
     }
     public function buwise_records($c_id, $bu_id)
     {
+        $c_id = $this->tenantCompanyId($c_id);
         $total_tickets = DB::select('SELECT * FROM `vw_tickets` WHERE company_id =? AND business_unit_id =? and active=1', [$c_id, $bu_id]);
         return response()->json($total_tickets);
     }
 
     public function totaltickets($c_id, $from, $to)
     {
+        $c_id = $this->tenantCompanyId($c_id);
 
         $total_tickets = DB::select("SELECT count(*) as total_tickets FROM `vw_tickets` where company_id = ? and created_at>=? and created_at <=? and active=1;", [$c_id, $from, $to]);
         return response()->json($total_tickets);
@@ -356,6 +389,7 @@ public function getallickets($id)
 
     public function totalticketscompany_wise($c_id)
     {
+        $c_id = $this->tenantCompanyId($c_id);
 
         try {
 
@@ -645,5 +679,14 @@ public function getallickets($id)
     GROUP BY week_dates.`Date`
     ORDER BY week_dates.`Date`;", [$c_id]);
         return response()->json($yearly_graph);
+    }
+
+    private function tenantCompanyId($requestedCompanyId)
+    {
+        $user = Auth::user();
+
+        return $user && (int) $user->company_id !== 0
+            ? $user->company_id
+            : $requestedCompanyId;
     }
 }

@@ -8,6 +8,7 @@
         <meta charset="utf-8" />
         <title>Dashboard | webadmin - Admin & Dashboard Template</title>
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="api-bearer-token" content="{{ session('api_bearer_token', '') }}">
         <meta content="Premium Multipurpose Admin & Dashboard Template" name="description" />
         <meta content="Themesdesign" name="author" />
         <!-- App favicon -->
@@ -68,6 +69,41 @@
         <script src="{{ asset('assets/js/pages/dashboard.init.js') }}"></script>
 
         <script src="{{ asset('assets/js/app.js') }}"></script>
+
+        <script>
+            (function () {
+                const token = document.querySelector('meta[name="api-bearer-token"]')?.content;
+                if (!token) return;
+
+                const addBearerHeader = (url, headers) => {
+                    try {
+                        if (new URL(url, window.location.href).origin === window.location.origin) {
+                            headers.set('Authorization', `Bearer ${token}`);
+                        }
+                    } catch (error) {
+                        // Ignore malformed or non-HTTP request URLs.
+                    }
+                    return headers;
+                };
+
+                if (window.jQuery) {
+                    window.jQuery.ajaxPrefilter((options, originalOptions, jqXHR) => {
+                        addBearerHeader(options.url, {
+                            set: (name, value) => jqXHR.setRequestHeader(name, value)
+                        });
+                    });
+                }
+
+                if (window.fetch) {
+                    const originalFetch = window.fetch.bind(window);
+                    window.fetch = (input, init = {}) => {
+                        const headers = new Headers(init.headers || (input instanceof Request ? input.headers : undefined));
+                        addBearerHeader(input instanceof Request ? input.url : input, headers);
+                        return originalFetch(input, { ...init, headers });
+                    };
+                }
+            })();
+        </script>
 
     </body>
 

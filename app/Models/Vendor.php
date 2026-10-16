@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToTenant;
 use \DateTimeInterface;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -11,6 +12,7 @@ use Spatie\MediaLibrary\Models\Media;
 
 class Vendor extends Model implements HasMedia
 {
+    use BelongsToTenant;
     use SoftDeletes;
     use HasMediaTrait;
 

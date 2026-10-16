@@ -10,6 +10,21 @@ window.axios = require('axios');
 
 window.axios.defaults.headers.common['X-Requested-With'] = 'XMLHttpRequest';
 
+const apiBearerToken = document.querySelector('meta[name="api-bearer-token"]')?.content;
+if (apiBearerToken) {
+    window.axios.interceptors.request.use((config) => {
+        const baseUrl = new URL(config.baseURL || window.location.href, window.location.href);
+        const requestUrl = new URL(config.url || '', baseUrl);
+
+        if (requestUrl.origin === window.location.origin) {
+            config.headers = config.headers || {};
+            config.headers.Authorization = `Bearer ${apiBearerToken}`;
+        }
+
+        return config;
+    });
+}
+
 /**
  * Echo exposes an expressive API for subscribing to channels and listening
  * for events that are broadcast by Laravel. Echo and event broadcasting

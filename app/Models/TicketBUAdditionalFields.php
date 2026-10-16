@@ -2,12 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToTenant;
 use \DateTimeInterface;
 use Illuminate\Database\Eloquent\Model;
 // use Illuminate\Database\Eloquent\SoftDeletes;
 
 class TicketBUAdditionalFields extends Model
 {
+    use BelongsToTenant;
     // use SoftDeletes;
 
     public $table = 'ticket_bu_level_fields';

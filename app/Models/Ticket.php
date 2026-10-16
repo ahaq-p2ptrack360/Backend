@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToTenant;
 use \DateTimeInterface;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
@@ -12,6 +13,7 @@ use Spatie\MediaLibrary\Models\Media;
 
 class Ticket extends Model implements HasMedia
 {
+    use BelongsToTenant;
     use SoftDeletes;
     use HasMediaTrait;
 

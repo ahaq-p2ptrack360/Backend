@@ -16,6 +16,22 @@ class Company extends Model implements HasMedia
     use HasMediaTrait;
     public $table = 'company';
 
+    protected static function booted()
+    {
+        static::addGlobalScope('authenticated-company', function ($query) {
+            $request = app('request');
+
+            if ($request->attributes->has('tenant_company_id') && !$request->attributes->get('tenant_platform_admin')) {
+                $companyId = $request->attributes->get('tenant_company_id');
+                if ($companyId === null) {
+                    $query->whereRaw('1 = 0');
+                } else {
+                    $query->where('company.id', $companyId);
+                }
+            }
+        });
+    }
+
     protected $appends = [
         'companylogo',
     ];

@@ -56,6 +56,41 @@
 {{-- <script src="https://cdn.datatables.net/1.13.5/js/jquery.dataTables.js"></script> --}}
 
 <script>
+  (function () {
+    const token = @json(session('api_bearer_token', ''));
+    if (!token) return;
+
+    const isSameOrigin = (url) => {
+      try {
+        return new URL(url, window.location.href).origin === window.location.origin;
+      } catch (error) {
+        return false;
+      }
+    };
+
+    if (window.jQuery) {
+      window.jQuery.ajaxPrefilter((options, originalOptions, jqXHR) => {
+        if (isSameOrigin(options.url)) {
+          jqXHR.setRequestHeader('Authorization', `Bearer ${token}`);
+        }
+      });
+    }
+
+    const originalFetch = window.fetch && window.fetch.bind(window);
+    if (originalFetch) {
+      window.fetch = (input, init = {}) => {
+        const requestUrl = input instanceof Request ? input.url : input;
+        const headers = new Headers(init.headers || (input instanceof Request ? input.headers : undefined));
+        if (isSameOrigin(requestUrl)) {
+          headers.set('Authorization', `Bearer ${token}`);
+        }
+        return originalFetch(input, { ...init, headers });
+      };
+    }
+  })();
+</script>
+
+<script>
   var id;
   var alertPlaceholder = document.getElementById("liveAlertPlaceholder");
 //   setInterval(function() {

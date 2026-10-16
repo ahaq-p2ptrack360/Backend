@@ -7,7 +7,6 @@ use App\Models\Tickets_new;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 use Maatwebsite\Excel\Concerns\ToModel;
-use Illuminate\Support\Facades\Auth;
 use Maatwebsite\Excel\Concerns\WithHeadingRow;
 
 class TicketsImport implements ToModel, WithHeadingRow
@@ -19,9 +18,11 @@ class TicketsImport implements ToModel, WithHeadingRow
     protected $priorities;
     protected $impacts;
     protected $statuses;
+    protected $userId;
     
-    public function __construct()
+    public function __construct($userId = null)
     {
+        $this->userId = $userId;
         // Fetch all data once
         $this->company = DB::table('company')->get();
         $this->users = DB::table('users')->get();
@@ -227,7 +228,7 @@ class TicketsImport implements ToModel, WithHeadingRow
             'status_id' => $status_id,
             'file' => $row["file"] ?? null,
             'store_contact' => $row["store_contact"] ?? null,
-            'created_by' => $created_by_id, // Changed from $created_by to $created_by_id
+            'created_by' => $this->userId ?? $created_by_id,
         ]);
     }
 }
