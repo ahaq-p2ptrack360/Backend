@@ -3,7 +3,7 @@
 namespace App\Events;
 
 use App\Models\UserNotification;
-use Illuminate\Broadcasting\PrivateChannel;
+use Illuminate\Broadcasting\Channel;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
 use Illuminate\Foundation\Events\Dispatchable;
@@ -58,7 +58,8 @@ class TicketCreatedNotification implements ShouldBroadcast
 
     public function broadcastOn()
     {
-        return new PrivateChannel('company.' . $this->companyId);
+        // Simple channel for testing - sabko notification milega
+        return new Channel('tickets');
     }
 
     public function broadcastAs()

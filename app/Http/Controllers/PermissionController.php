@@ -4,13 +4,9 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Auth;
-use App\Http\Controllers\Concerns\ScopesTenantCompanyData;
 
 class PermissionController extends Controller
 {
-    use ScopesTenantCompanyData;
-
     public function index()
     {
         $permissions = DB::select('SELECT * FROM permissions');
@@ -19,10 +15,7 @@ class PermissionController extends Controller
 
     public function store(Request $request)
     {
-        if ((int) Auth::user()->company_id !== 0) {
-            return response()->json(['message' => 'Forbidden'], 403);
-        }
-        $data = $request->validate(['title' => 'required|string|max:255']);
+        $data = $request->all();
 
         DB::insert('INSERT INTO permissions (title) VALUES (?)',
             [$data['title']]);
@@ -32,20 +25,13 @@ class PermissionController extends Controller
 
     public function show($id)
     {
-        $role = $this->scopeVisibleCompanyData(DB::table('roles'))->where('id', $id)->first();
-        if (!$role) {
-            return response()->json(['message' => 'Role not found'], 404);
-        }
-        $permission = DB::table('role_permissions')->where('role_id', $id)->get();
+        $permission = DB::select('SELECT * FROM role_permissions WHERE role_id = ?', [$id]);
         return response()->json($permission);
     }
 
     public function update(Request $request, $id)
     {
-        if ((int) Auth::user()->company_id !== 0) {
-            return response()->json(['message' => 'Forbidden'], 403);
-        }
-        $data = $request->validate(['title' => 'required|string|max:255']);
+        $data = $request->all();
 
         DB::update('UPDATE permissions SET title = ? WHERE id = ?', [$data['title'], $id]);
 
@@ -54,9 +40,6 @@ class PermissionController extends Controller
 
     public function destroy($id)
     {
-        if ((int) Auth::user()->company_id !== 0) {
-            return response()->json(['message' => 'Forbidden'], 403);
-        }
         DB::delete('DELETE FROM permissions WHERE id = ?', [$id]);
         return response()->json(['message' => 'Permission deleted successfully']);
     }
@@ -75,9 +58,6 @@ class PermissionController extends Controller
         ]);
     
         $roleId = $validated['role_id'];
-        if (!$this->scopeWritableCompanyData(DB::table('roles'))->where('id', $roleId)->exists()) {
-            return response()->json(['message' => 'Role not found'], 404);
-        }
         $permissionsList = $validated['permissions'];
     
         // Allowed page keys (must match your columns)

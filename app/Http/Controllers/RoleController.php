@@ -4,33 +4,29 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use App\Http\Controllers\Concerns\ScopesTenantCompanyData;
 
 
 class RoleController extends Controller
 {
-    use ScopesTenantCompanyData;
-
     public function index()
     {
-        $roles = $this->scopeVisibleCompanyData(DB::table('roles'))->get();
+        $roles = DB::select('SELECT * FROM roles');
         return response()->json($roles);
     }
 
     public function company($id)
     {
-        $roles = $this->scopeVisibleCompanyData(DB::table('roles'))
-            ->where('company_id', $id)->get();
+        $roles = DB::select('SELECT * FROM roles where company_id=?',[$id]);
         return response()->json($roles);
     }
     public function store(Request $request)
     {
-        $data = $request->validate(['title' => 'required|string|max:255', 'company_id' => 'nullable|integer']);
+        $data = $request->all();
 
         // DB::insert('INSERT INTO roles (company_id, name,is_active) VALUES (?,?, ?)',
         //     [$data['company_id'], $data['title'],'1']);
         DB::insert('INSERT INTO roles (company_id, name, guard_name, is_active) VALUES (?,?,?,?)',
-    [$this->tenantCompanyId($data['company_id'] ?? 0), $data['title'], 'web', '1']);
+    [$data['company_id'], $data['title'], 'web', '1']);
 
 
         // DB::insert('INSERT INTO permission_role (role_id, permission_id) VALUES (?, ?)',
@@ -41,35 +37,22 @@ class RoleController extends Controller
 
     public function show($id)
     {
-        $role = $this->scopeVisibleCompanyData(DB::table('roles'))
-            ->where('id', $id)->get();
+        $role = DB::select('SELECT * FROM roles WHERE id = ?', [$id]);
         return response()->json($role);
     }
 
     public function update(Request $request,$id)
     {
-        $data = $request->validate(['title' => 'required|string|max:255', 'company_id' => 'nullable|integer']);
+        $data = $request->all();
 
-        $query = $this->scopeWritableCompanyData(DB::table('roles'));
-        $existing = $query->where('id', $id)->first();
-        if (!$existing) {
-            return response()->json(['message' => 'Role not found'], 404);
-        }
-        $this->scopeWritableCompanyData(DB::table('roles'))->where('id', $id)->update([
-            'company_id' => $this->tenantCompanyId($data['company_id'] ?? $existing->company_id),
-            'name' => $data['title'],
-        ]);
+        DB::update('UPDATE roles SET company_id = ?, name = ? WHERE id = ?', [$data['company_id'], $data['title'],$id]);
 
         return response()->json(['message' => 'Role updated successfully']);
     }
 
     public function destroy($id)
     {
-        $query = $this->scopeWritableCompanyData(DB::table('roles'))->where('id', $id);
-        if (!$query->exists()) {
-            return response()->json(['message' => 'Role not found'], 404);
-        }
-        $query->delete();
+        DB::delete('DELETE FROM roles WHERE id = ?', [$id]);
         return response()->json(['message' => 'Role deleted successfully']);
     }
 }
