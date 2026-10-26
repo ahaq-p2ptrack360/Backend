@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Company;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Carbon\Carbon;
 
 class BillingController extends Controller
@@ -12,6 +13,11 @@ class BillingController extends Controller
     public function getCompanyBillingHistory($companyId)
     {
         try {
+
+            $principal = Auth::user();
+            if (!$principal || ((int) $principal->company_id !== 0 && (int) $principal->company_id !== (int) $companyId)) {
+                return response()->json(['status' => false, 'message' => 'Forbidden'], 403);
+            }
 
             // ================= COMPANY CHECK =================
             $company = Company::find($companyId);

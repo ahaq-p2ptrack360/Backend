@@ -4,18 +4,24 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Auth;
+use App\Http\Controllers\Concerns\ScopesTenantCompanyData;
 
 class NotificationController extends Controller
 {
+    use ScopesTenantCompanyData;
+
     public function index()
     {
-        $notifications = DB::table('notifications')->get();
+        $notifications = $this->scopeWritableCompanyData(DB::table('notifications'))->get();
         return response()->json($notifications);
     }
 
     public function store(Request $request)
     {
-        $data = $request->only('type', 'data','created_by','company_id');
+        $data = $request->validate(['type' => 'required|string|max:255', 'data' => 'nullable', 'company_id' => 'nullable|integer']);
+        $data['company_id'] = $this->tenantCompanyId($data['company_id'] ?? 0);
+        $data['created_by'] = Auth::id();
         
         $data['created_at'] = now(); // Set the current timestamp
         
@@ -26,7 +32,7 @@ class NotificationController extends Controller
 
     public function show($id)
     {
-        $notification = DB::table('notifications')->find($id);
+        $notification = $this->scopeWritableCompanyData(DB::table('notifications'))->where('id', $id)->first();
 
         if ($notification) {
             return response()->json($notification);
@@ -36,15 +42,17 @@ class NotificationController extends Controller
     }
     public function company($id,$u_id)
     {
-        $noti = DB::select('SELECT * FROM notifications WHERE company_id = ? and created_by != ?  order by id desc limit 1', [$id,$u_id]);
+        $companyId = $this->tenantCompanyId($id);
+        $noti = DB::table('notifications')->where('company_id', $companyId)
+            ->where('created_by', '!=', Auth::id())->orderByDesc('id')->limit(1)->get();
         return response()->json($noti);
     }
 
     public function update(Request $request, $id)
     {
-        $data = $request->only('type', 'data');
+        $data = $request->validate(['type' => 'sometimes|required|string|max:255', 'data' => 'sometimes|nullable']);
         
-        $updated = DB::table('notifications')->where('id', $id)->update($data);
+        $updated = $this->scopeWritableCompanyData(DB::table('notifications'))->where('id', $id)->update($data);
 
         if ($updated) {
             return response()->json(['message' => 'Notification updated']);
@@ -55,7 +63,7 @@ class NotificationController extends Controller
 
     public function destroy($id)
     {
-        $deleted = DB::table('notifications')->where('id', $id)->delete();
+        $deleted = $this->scopeWritableCompanyData(DB::table('notifications'))->where('id', $id)->delete();
 
         if ($deleted) {
             return response()->json(['message' => 'Notification deleted']);

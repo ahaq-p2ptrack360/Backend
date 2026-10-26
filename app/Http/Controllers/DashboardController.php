@@ -449,35 +449,36 @@ public function getallickets($id)
 
     public function notifyemail($id, $tid)
     {
+        $principal = Auth::user();
+        if (!$principal) {
+            return response()->json(['message' => 'Unauthenticated'], 401);
+        }
+        $ticketQuery = DB::table('vw_tickets')->where('id', $tid);
+        $userQuery = DB::table('users')->where('id', $id);
+        if ((int) $principal->company_id !== 0) {
+            $ticketQuery->where('company_id', $principal->company_id);
+            $userQuery->where('company_id', $principal->company_id);
+        }
+        $ticket = $ticketQuery->first();
+        $recipient = $userQuery->first();
+        if (!$ticket || !$recipient || (int) $ticket->company_id !== (int) $recipient->company_id) {
+            return response()->json(['message' => 'Ticket or recipient not found'], 404);
+        }
 
-        $response1 = DB::select("SELECT * FROM `vw_tickets` WHERE `id` =?;", [$tid]);
-        $response  = DB::select("SELECT * FROM `users` WHERE `id`  =?;", [$id]);
-        echo $response1[0]->id;
-        echo $response1[0]->title;
-        echo $response1[0]->description;
-        echo $response1[0]->due_date;
-        echo $response1[0]->completed_date;
-        echo $response1[0]->completed_by;
-        echo $response1[0]->created_at;
-        echo $response1[0]->reported_by_name;
-        echo $response1[0]->bu_name;
-        echo $response1[0]->status_title;
-
-
-        $user_email = $response[0]->about;
+        $user_email = $recipient->about;
 
 
         $data = [
-            'name' => $response1[0]->title,
-            'description' => $response1[0]->description,
-            'due_date' => $response1[0]->due_date,
-            'completed_by' => $response1[0]->completed_by,
-            'created_at' => $response1[0]->created_at,
-            'reported_by' => $response1[0]->reported_by_name,
-            'bu_name' => $response1[0]->bu_name,
-            'status_title' => $response1[0]->status_title,
-            'resolved_name' => $response1[0]->resolved_name,
-            'ticket_id' => $response1[0]->id
+            'name' => $ticket->title,
+            'description' => $ticket->description,
+            'due_date' => $ticket->due_date,
+            'completed_by' => $ticket->completed_by,
+            'created_at' => $ticket->created_at,
+            'reported_by' => $ticket->reported_by_name,
+            'bu_name' => $ticket->bu_name,
+            'status_title' => $ticket->status_title,
+            'resolved_name' => $ticket->resolved_name,
+            'ticket_id' => $ticket->id
 
         ];
 
@@ -488,7 +489,7 @@ public function getallickets($id)
                 ->subject('Here are your login credentials for your Account')
                 ->setBody($mailContent, 'text/html');
         });
-        return  response()->json($response1);
+        return response()->json(['message' => 'Ticket email sent']);
     }
 
     public function weekly_graph_inprogress($c_id)

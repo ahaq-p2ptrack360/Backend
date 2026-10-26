@@ -303,7 +303,8 @@ public function store(Request $request)
     {
         $data = $request->all();
         if (!$this->ticketBelongsToTenant($data['ticket_id'] ?? null)
-            || !$this->vendorBelongsToTenant($data['vendor_id'] ?? null)) {
+            || !$this->vendorBelongsToTenant($data['vendor_id'] ?? null)
+            || !$this->vendorMatchesTicket($data['vendor_id'] ?? null, $data['ticket_id'] ?? null)) {
             return response()->json(['error' => 'Ticket or vendor not found'], 404);
         }
         // You need to adjust the field names according to your table structure
@@ -320,7 +321,7 @@ public function store(Request $request)
 
     public function showvt($id)
     {
-        $sql = 'SELECT t.*,q.amount,vt.id as vid ,vt.vendor_id as vendorId FROM vendor_tickets vt join vw_tickets t on t.id = vt.ticket_id left join qoutations q on vt.ticket_id =q.ticket_id WHERE vt.id = ? and vt.status =1';
+        $sql = 'SELECT t.*,q.amount,vt.id as vid,vt.vendor_id as vendorId FROM vendor_tickets vt join vw_tickets t on t.id = vt.ticket_id left join qoutations q on vt.ticket_id = q.ticket_id and q.company_id = t.company_id and q.vendor_id = vt.vendor_id WHERE vt.id = ? and vt.status =1';
         $bindings = [$id];
         if ($this->tenantCompanyId() !== null) {
             $sql .= ' AND t.company_id = ?';
@@ -345,7 +346,7 @@ public function store(Request $request)
         if (!$this->ticketBelongsToTenant($id)) {
             return response()->json(['error' => 'Ticket not found'], 404);
         }
-        $sql = 'SELECT q.*,v.name as vendor from qoutations q join vendors v on q.vendor_id = v.id where ticket_id=?';
+        $sql = 'SELECT q.*,v.name as vendor from qoutations q join vendors v on q.vendor_id = v.id and v.company_id = q.company_id join tickets t on t.id = q.ticket_id and t.company_id = q.company_id where q.ticket_id=?';
         $bindings = [$id];
         if ($this->tenantCompanyId() !== null) {
             $sql .= ' AND q.company_id = ?';
@@ -359,18 +360,15 @@ public function store(Request $request)
     // Get vendor and ticket data
         $vendor = DB::table('vendors')->where('id', $vid)->when($this->tenantCompanyId() !== null, function ($query) {
             $query->where('company_id', $this->tenantCompanyId());
-        })->get();
+        })->first();
         $ticket = DB::table('tickets')->where('id', $tid)->when($this->tenantCompanyId() !== null, function ($query) {
             $query->where('company_id', $this->tenantCompanyId());
-        })->get();
+        })->first();
 
     // Check if both exist
-    if ($vendor->isEmpty() || $ticket->isEmpty()) {
+    if (!$vendor || !$ticket || (int) $vendor->company_id !== (int) $ticket->company_id) {
         return response()->json(['error' => 'Vendor or Ticket not found'], 404);
     }
-
-    $vendor = $vendor[0];
-    $ticket = $ticket[0];
 
     $email = $vendor->email ?? null;
 
@@ -445,5 +443,12 @@ public function store(Request $request)
             $query->where('company_id', $this->tenantCompanyId());
         }
         return $query->exists();
+    }
+
+    private function vendorMatchesTicket($vendorId, $ticketId)
+    {
+        $vendor = DB::table('vendors')->where('id', $vendorId)->first(['company_id']);
+        $ticket = DB::table('tickets')->where('id', $ticketId)->first(['company_id']);
+        return $vendor && $ticket && (int) $vendor->company_id === (int) $ticket->company_id;
     }
 }
