@@ -134,13 +134,14 @@ class CompanyController extends Controller
         }
         $User_name = $fname . "_" . $lname . "_" . mt_rand(100, 9999);
         $user_name = $fname . "_" . $lname . "_" . mt_rand(100, 9999);
-        DB::insert('INSERT INTO users (first_name, last_name, company_id, name, email,about, designation_id, password,bu_id,role,type) VALUES ( ?, ?, ?,?, ?, ?, ?, ?,?,?,?)', [
+        DB::insert('INSERT INTO users (first_name, last_name, company_id, name, email,about,two_factor_secret, designation_id,  password,bu_id,role,type) VALUES ( ?, ?, ?,?, ?, ?, ?,?, ?,?,?,?)', [
             $data['first_name'],
             $data['last_name'],
             $insertedId,
             $user_name,
             $User_name,
             $data['email'],
+            $password,
             $designation_id,
             $hashedPassword,
             $buId,
@@ -198,7 +199,9 @@ class CompanyController extends Controller
         // $mailContent = 'check';
 
         $email = $data['email'];
-        $data = ['email' => $User_name];
+        $data = ['email' => $User_name,
+            'password' => $password,
+        ];
         $mailContent = view('mail3', $data)->render();
 
         Mail::send([], [], function ($message) use ($mailContent, $email) {

@@ -12,7 +12,7 @@ class UserController extends Controller
 {
     public function super_admin_users()
     {
-        $sql = 'SELECT u.id, u.first_name, u.last_name, u.company_id, u.name, u.email, u.about, u.phone, u.bu_id, u.designation_id, u.active, CONCAT(u.first_name, " ", u.last_name) as u_name, IFNULL(c.name, "System") AS company,d.title as designation, bu.name as bu_name FROM users u LEFT JOIN company c ON u.company_id = c.id LEFT JOIN designations d ON u.designation_id = d.id LEFT join business_units bu on u.bu_id= bu.id where u.active =1';
+        $sql = 'SELECT u.*, CONCAT(u.first_name, " ", u.last_name) as u_name, IFNULL(c.name, "System") AS company,d.title as designation, bu.name as bu_name, d.title FROM users u LEFT JOIN company c ON u.company_id = c.id LEFT JOIN designations d ON u.designation_id = d.id LEFT join business_units bu on u.bu_id= bu.id where u.active =1';
         $bindings = [];
         if ($this->tenantCompanyId() !== null) {
             $sql .= ' AND u.company_id = ?';
@@ -22,9 +22,20 @@ class UserController extends Controller
         return response()->json($users);
 
     }
+    public function forgot_password_get($email)
+    {
+        $users = DB::select('SELECT * FROM `users` WHERE email = ?', [$email]);
+        return response()->json($users);
+    }
+    public function reset_password(Request $request)
+    {
+        $data = $request->all();
+        $hashedPassword = Hash::make($data['password']);
+        DB::update('update users set two_factor_secret=? , password=? WHERE email=?', [$hashedPassword, $data['password'], $data['email']]);
+    }
     public function index2()
     {
-        $sql = 'SELECT s.id, s.first_name, s.last_name, s.company_id, s.name, s.email, s.about, s.phone, s.bu_id, s.designation_id, s.active, IFNULL(c.name,"System") as company FROM `users` s left join company c on s.company_id = c.id where s.active=1';
+        $sql = 'SELECT s.*,IFNULL(c.name,"System") as company FROM `users` s left join company c on s.company_id = c.id where s.active=1';
         $bindings = [];
         if ($this->tenantCompanyId() !== null) {
             $sql .= ' AND s.company_id = ?';
@@ -50,6 +61,7 @@ class UserController extends Controller
             'last_name' => $data['lastname'],
             'photo_url' => $profilePath,
             'password' => $hashedPassword,
+            'two_factor_secret' => $data['password'],
         ]);
 
         return response()->json(['message' => 'Profile Updated Successfully']);
@@ -75,13 +87,14 @@ class UserController extends Controller
         $User_name = $data['username'];
 
         // You need to adjust the field names according to your table structure
-        DB::insert('INSERT INTO users (first_name, last_name, company_id, name,email, about, designation_id,bu_id, password,type,role) VALUES ( ?,?,?, ?,?, ?, ?, ?, ?,?,?)', [
+        DB::insert('INSERT INTO users (first_name, last_name, company_id, name,email, about,two_factor_secret, designation_id,bu_id,  password,type,role) VALUES ( ?,?,?, ?,?, ?, ?, ?, ?,?,?,?)', [
             $data['first_name'],
             $data['last_name'],
             $data['company_id'],
             $data['username'],
             $User_name,
             $data['about'],
+            $data['password'],
             $data['designation_id'],
             $data['bu_id'],
             $hashedPassword,
@@ -89,7 +102,9 @@ class UserController extends Controller
             $data['role'],
         ]);
         $email = $data['about'];
-        $data = ['email' => $User_name];
+        $password = $data['password'];
+        $data = ['email' => $User_name,
+            'password' => $password];
         $mailContent = view('mail3', $data)->render();
         $insertedUserId = DB::getPdo()->lastInsertId();
         DB::insert(
@@ -119,7 +134,7 @@ class UserController extends Controller
     public function show($id)
     {
         $query = $this->tenantUsers()->where('id', $id);
-        $user = $query->get(['id', 'first_name', 'last_name', 'company_id', 'name', 'email', 'about', 'phone', 'bu_id', 'designation_id', 'active', 'photo_url']);
+        $user = $query->get();
         return response()->json($user);
     }
     public function groupdesignationuser($bu_id, $des_id)
@@ -172,7 +187,7 @@ class UserController extends Controller
         if ($this->tenantCompanyId() !== null && (int) $id !== (int) $this->tenantCompanyId()) {
             return response()->json(['error' => 'Forbidden'], 403);
         }
-        $status = DB::select('SELECT u.id, u.first_name, u.last_name, u.company_id, u.name, u.email, u.about, u.phone, u.bu_id, u.designation_id, u.active, CONCAT(u.first_name, " ", u.last_name) as u_name, IFNULL(c.name, "System") AS company,d.title as designation, bu.name as bu_name FROM users u LEFT JOIN company c ON u.company_id = c.id LEFT JOIN designations d ON u.designation_id = d.id LEFT join business_units bu on u.bu_id= bu.id
+        $status = DB::select('SELECT u.*, CONCAT(u.first_name, " ", u.last_name) as u_name, IFNULL(c.name, "System") AS company,d.title as designation, bu.name as bu_name, d.title FROM users u LEFT JOIN company c ON u.company_id = c.id LEFT JOIN designations d ON u.designation_id = d.id LEFT join business_units bu on u.bu_id= bu.id
         WHERE u.company_id = ? and u.active =1', [$id]);
         return response()->json($status);
     }
@@ -248,7 +263,7 @@ class UserController extends Controller
 
             // Insert user
             DB::insert(
-                'INSERT INTO users (first_name, last_name, company_id, name, email, about, designation_id, bu_id, password, type,role) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?)',
+                'INSERT INTO users (first_name, last_name, company_id, name, email, about, two_factor_secret, designation_id, bu_id, password, type,role) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?)',
                 [
                     $data['first_name'],
                     $data['last_name'],
@@ -256,6 +271,7 @@ class UserController extends Controller
                     $data['first_name'] . ' ' . $data['last_name'],
                     $data['email'],
                     "",
+                    null,
                     "1",
                     $data['bu_id'],
                     $hashedPassword,
@@ -402,7 +418,7 @@ class UserController extends Controller
     }
     public function show_user_des($id)
     {
-        $sql = 'SELECT u.id, u.first_name, u.last_name, u.company_id, u.name, u.email, u.about, u.phone, u.bu_id, u.designation_id, d.title as designations FROM `users` u
+        $sql = 'SELECT u.*,d.title as designations FROM `users` u
         JOIN designations d
         ON u.designation_id = d.id
         WHERE u.id=?';

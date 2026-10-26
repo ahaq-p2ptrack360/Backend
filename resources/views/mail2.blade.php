@@ -365,8 +365,14 @@
                                                                                 </td>
                                                                             </tr>
                                                                             <tr>
-                                                                                <td align="left" style="font-size:0px;padding:10px 25px;word-break:break-word;">
-                                                                                    <p style="margin:0;color:#ffffff;">For your security, this email does not contain a password. <a href="{{ route('password.request') }}" style="color:#ffffff;">Set or reset your password</a>.</p>
+                                                                                <td align="left"
+                                                                                    style="font-size:0px;padding:10px 25px;word-break:break-word;">
+                                                                                    <div
+                                                                                        style="font-family:Roboto, Helvetica, Arial, sans-serif;font-size:16px;font-weight:400;line-height:20px;text-align:left;color:#ffffff;">
+                                                                                        <p style="margin: 0;">
+                                                                                            <strong>Password:</strong>{{$password}}
+                                                                                        </p>
+                                                                                    </div>
                                                                                 </td>
                                                                             </tr>
                                                                            

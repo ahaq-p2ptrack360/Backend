@@ -143,10 +143,15 @@ Route::post('bu', [App\Http\Controllers\Ticket_import_Controller::class, 'BU'])-
 Route::post('user', [App\Http\Controllers\Ticket_import_Controller::class, 'Users'])->name('users');
 Route::post('group', [App\Http\Controllers\Ticket_import_Controller::class, 'Group'])->name('group');
 Route::get('/forgot_password', function () {
-    return view('auth.passwords.email');
+    return view('auth/forgot-password');
+});
+
+Route::get('/reset_password/{email}', function () {
+    return view('auth/reset_password');
 });
 Route::get('/recover_login', function () {
-    return view('auth.passwords.email');
+    // resources/views/auth/reset_password.blade.php
+    return view('auth/forgot-password');
 });
 Route::get('/otp/input', function () {
     // resources/views/auth/reset_password.blade.php

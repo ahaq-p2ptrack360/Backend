@@ -40,6 +40,9 @@ use App\Http\Controllers\BillingController;
 */
 
 Route::post('login', [AuthController::class, 'login2'])->name('login-custom');
+Route::get('forgot_pass/{email}', [UserController::class, 'forgot_password_get']);
+Route::get('reset/{email}', [UserController::class, 'reset_password']);
+Route::get('sendbasicemail/{email}/{username}', [MailController::class, 'basic_email']);
 
 Route::middleware(['auth:sanctum', 'tenant.context'])->group(function () {
 Route::get('/user', function (Request $request) {

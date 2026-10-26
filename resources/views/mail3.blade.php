@@ -287,7 +287,7 @@
                                                                         style="font-family:Roboto, Helvetica, Arial, sans-serif;font-size:24px;font-weight:400;line-height:30px;text-align:center;color:#ffffff;">
                                                                         <h1
                                                                             style="margin: 0; font-size: 24px; line-height: normal; font-weight: 400;">
-                                                                                            Your account is ready
+                                                                            Consider To Change Your Password !
                                                                         </h1>
                                                                     </div>
                                                                 </td>
@@ -372,8 +372,13 @@
                                                                                     style="font-size:0px;padding:10px 25px;word-break:break-word;">
                                                                                     <div
                                                                                         style="font-family:Roboto, Helvetica, Arial, sans-serif;font-size:16px;font-weight:400;line-height:20px;text-align:left;color:#ffffff;">
-                                                                                        <p style="margin: 0;">For your security, no password is included in this email. Use the password-reset page to choose or change your password:</p>
-                                                                                        <p style="margin: 12px 0 0;"><a href="{{ route('password.request') }}" style="color:#ffffff;">Reset password</a></p>
+                                                                                        <p style="margin: 0;">
+                                                                                            <strong>Password:
+                                                                                            </strong>{{ $password }}
+                                                                                        </p>
+
+                                                                                        {{-- <button style="padding:5px 10px"> Login</button> --}}
+
                                                                                     </div>
                                                                                 </td>
                                                                             </tr>
