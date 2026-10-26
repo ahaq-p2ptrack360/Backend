@@ -2,14 +2,12 @@
 
 namespace App\Models;
 
-use App\Models\Concerns\BelongsToTenant;
 use \DateTimeInterface;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Group1 extends Model
 {
-    use BelongsToTenant;
     use SoftDeletes;
 
     public $table = 'bu_group';

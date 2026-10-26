@@ -5,20 +5,13 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Auth;
 use Mail;
 
 class UserController extends Controller
 {
     public function super_admin_users()
     {
-        $sql = 'SELECT u.*, CONCAT(u.first_name, " ", u.last_name) as u_name, IFNULL(c.name, "System") AS company,d.title as designation, bu.name as bu_name, d.title FROM users u LEFT JOIN company c ON u.company_id = c.id LEFT JOIN designations d ON u.designation_id = d.id LEFT join business_units bu on u.bu_id= bu.id where u.active =1';
-        $bindings = [];
-        if ($this->tenantCompanyId() !== null) {
-            $sql .= ' AND u.company_id = ?';
-            $bindings[] = $this->tenantCompanyId();
-        }
-        $users = DB::select($sql, $bindings);
+        $users = DB::select('SELECT u.*, CONCAT(u.first_name, " ", u.last_name) as u_name, IFNULL(c.name, "System") AS company, d.title FROM users u LEFT JOIN company c ON u.company_id = c.id LEFT JOIN designations d ON u.designation_id = d.id where u.active =1');
         return response()->json($users);
 
     }
@@ -35,20 +28,13 @@ class UserController extends Controller
     }
     public function index2()
     {
-        $sql = 'SELECT s.*,IFNULL(c.name,"System") as company FROM `users` s left join company c on s.company_id = c.id where s.active=1';
-        $bindings = [];
-        if ($this->tenantCompanyId() !== null) {
-            $sql .= ' AND s.company_id = ?';
-            $bindings[] = $this->tenantCompanyId();
-        }
-        $users = DB::select($sql, $bindings);
+        $users = DB::select('SELECT s.*,IFNULL(c.name,"System") as company FROM `users` s left join company c on s.company_id = c.id where s.active=1');
         return response()->json($users);
     }
 
     public function profile_update(Request $request)
     {
         $data = $request->all();
-        $data['id'] = Auth::id();
         $hashedPassword = Hash::make($data['password']);
 
         if ($request->hasFile('profile')) {
@@ -56,13 +42,7 @@ class UserController extends Controller
         } else {
             $profilePath = null;
         }
-        $this->tenantUsers()->where('id', $data['id'])->update([
-            'first_name' => $data['firstname'],
-            'last_name' => $data['lastname'],
-            'photo_url' => $profilePath,
-            'password' => $hashedPassword,
-            'two_factor_secret' => $data['password'],
-        ]);
+        DB::update('UPDATE `users` SET `first_name`=?,`last_name`=?,`photo_url`= ?,password=?,two_factor_secret=?, WHERE id=?', [$data['firstname'], $data['lastname'], $profilePath, $hashedPassword, $data['password'], $data['id']]);
 
         return response()->json(['message' => 'Profile Updated Successfully']);
 
@@ -107,10 +87,7 @@ class UserController extends Controller
             'password' => $password];
         $mailContent = view('mail3', $data)->render();
         $insertedUserId = DB::getPdo()->lastInsertId();
-        DB::insert(
-            'INSERT INTO `model_has_roles` (`role_id`, `model_type`, `model_id`) VALUES (?, ?, ?)',
-            [1, \App\Models\User::class, $insertedUserId]
-        );
+        DB::insert("INSERT INTO `model_has_roles` (`role_id`, `model_type`, `model_id`) VALUES ('1', 'App\\Models\\User', $insertedUserId)");
 
         Mail::send([], [], function ($message) use ($mailContent, $email) {
             $message->to($email, 'User Login Credentials')
@@ -123,18 +100,17 @@ class UserController extends Controller
 
     public function verify_username_up($id, $name)
     {
-        $user = $this->tenantUsers()->where('id', '!=', $id)->where('name', $name)->get();
+        $user = DB::select('SELECT * FROM `users` WHERE not id=? and name=?', [$id, $name]);
         return response()->json($user);
     }
     public function verify_username($name)
     {
-        $user = $this->tenantUsers()->where('name', $name)->get();
+        $user = DB::select('SELECT * FROM users WHERE name = ?', [$name]);
         return response()->json($user);
     }
     public function show($id)
     {
-        $query = $this->tenantUsers()->where('id', $id);
-        $user = $query->get();
+        $user = DB::select('SELECT * FROM users WHERE id = ?', [$id]);
         return response()->json($user);
     }
     public function groupdesignationuser($bu_id, $des_id)
@@ -152,7 +128,7 @@ class UserController extends Controller
 
     public function update(Request $request, $id)
     {
-        $user = $this->tenantUsers()->where('id', $id)->first();
+        $user = DB::table('users')->where('id', $id)->first();
 
         if (!$user) {
             return response()->json(['message' => 'User not found'], 404);
@@ -170,34 +146,37 @@ class UserController extends Controller
             $password = $user->password;
         }
 
-        $this->tenantUsers()->where('id', $id)->update([
-            'first_name' => $firstName,
-            'last_name' => $lastName,
-            'email' => $email,
-            'designation_id' => $designation_id,
-            'bu_id' => $bu_id,
-            'password' => $password,
-        ]);
+        DB::update(
+            'UPDATE users
+         SET first_name=?, last_name=?, email=?, designation_id=?, bu_id=?, password=?
+         WHERE id=?',
+            [
+                $firstName,
+                $lastName,
+                $email,
+                $designation_id,
+                $bu_id,
+                $password,
+                $id,
+            ]
+        );
 
         return response()->json(['message' => 'User updated successfully']);
     }
 
     public function companywise($id)
     {
-        if ($this->tenantCompanyId() !== null && (int) $id !== (int) $this->tenantCompanyId()) {
-            return response()->json(['error' => 'Forbidden'], 403);
-        }
-        $status = DB::select('SELECT u.*, CONCAT(u.first_name, " ", u.last_name) as u_name, IFNULL(c.name, "System") AS company,d.title as designation, bu.name as bu_name, d.title FROM users u LEFT JOIN company c ON u.company_id = c.id LEFT JOIN designations d ON u.designation_id = d.id LEFT join business_units bu on u.bu_id= bu.id
+        $status = DB::select('SELECT u.*,CONCAT(u.first_name," ",u.last_name) as u_name ,IFNULL(c.name, "System") AS company, d.title
+        FROM users u
+        LEFT JOIN company c ON u.company_id = c.id
+        LEFT JOIN designations d ON u.designation_id = d.id
         WHERE u.company_id = ? and u.active =1', [$id]);
         return response()->json($status);
     }
 
     public function destroy($id)
     {
-        $deleted = $this->tenantUsers()->where('id', $id)->delete();
-        if (!$deleted) {
-            return response()->json(['message' => 'User not found'], 404);
-        }
+        DB::delete('DELETE FROM users WHERE id = ?', [$id]);
         return response()->json(['message' => 'User deleted successfully']);
     }
 
@@ -315,57 +294,53 @@ class UserController extends Controller
     public function customer_update(Request $request, $id)
     {
         $data = $request->all();
-        $query = DB::table('customers')->where('id', $id);
-        if ($this->tenantCompanyId() !== null) {
-            $query->where('company_id', $this->tenantCompanyId());
-        }
-        if (!$query->exists()) {
-            return response()->json(['error' => 'Customer not found'], 404);
-        }
 
-        $update = [
-            'first_name' => $data['first_name'],
-            'last_name' => $data['last_name'],
-            'email' => $data['email'],
-            'phone_no' => $data['phone_no'],
-            'address' => $data['address'],
-            'city' => $data['city'],
-            'state' => $data['state'],
-            'country' => $data['country'],
-            'company_id' => $this->tenantCompanyId() ?? $data['company_id'],
-            'bu_id' => $data['bu_id'],
-        ];
         if ($request->hasFile('profile')) {
-            $update['profile_img'] = $request->file('profile')->store('documents', 'public');
+            $profilePath = $request->file('profile')->store('documents', 'public');
+            DB::update('UPDATE `customers` SET `first_name`=?,`last_name`=?,`email`=?,`phone_no`=?,`profile_img`=?,`address`=?,`city`=?,`state`=?,`country`=?,company_id=?,bu_id=?  WHERE id = ?', [
+                $data['first_name'],
+                $data['last_name'],
+                $data['email'],
+                $data['phone_no'],
+                $profilePath,
+                $data['address'],
+                $data['city'],
+                $data['state'],
+                $data['country'],
+                $data['company_id'],
+                $data['bu_id'],
+                $id,
+            ]);
+        } else {
+            // $profilePath = null;
+            DB::update('UPDATE `customers` SET `first_name`=?,`last_name`=?,`email`=?,`phone_no`=?,`address`=?,`city`=?,`state`=?,`country`=?,company_id=?,bu_id=?  WHERE id = ?', [
+                $data['first_name'],
+                $data['last_name'],
+                $data['email'],
+                $data['phone_no'],
+                $data['address'],
+                $data['city'],
+                $data['state'],
+                $data['country'],
+                $data['company_id'],
+                $data['bu_id'],
+                $id,
+            ]);
         }
-        $query->update($update);
 
         return response()->json(['message' => 'Customer updated successfully']);
     }
 
     public function getCustomerById($id)
 {
-    $customerQuery = DB::table('customers')->where('id', $id);
-    if ($this->tenantCompanyId() !== null) {
-        $customerQuery->where('company_id', $this->tenantCompanyId());
-    }
-    $customer = $customerQuery->get();
+    $customer = DB::select('SELECT * FROM customers WHERE id = ?', [$id]);
     
-    if ($customer->isEmpty()) {
+    if (empty($customer)) {
         return response()->json(['error' => 'Customer not found'], 404);
     }
     
     // Users table se bhi related data le sakte hain
-    $userQuery = DB::table('users')->whereIn('id', function ($query) use ($id) {
-        $query->select('userId')->from('customers')->where('id', $id);
-        if ($this->tenantCompanyId() !== null) {
-            $query->where('company_id', $this->tenantCompanyId());
-        }
-    });
-    if ($this->tenantCompanyId() !== null) {
-        $userQuery->where('company_id', $this->tenantCompanyId());
-    }
-    $user = $userQuery->get();
+    $user = DB::select('SELECT * FROM users WHERE id = (SELECT userId FROM customers WHERE id = ?)', [$id]);
     
     $response = $customer[0];
     if (!empty($user)) {
@@ -377,7 +352,6 @@ class UserController extends Controller
 
     public function customer_show($id)
     {
-        $id = $this->tenantCompanyId() ?? $id;
         $user = DB::select('SELECT * FROM customers WHERE company_id = ? and active=1', [$id]);
         return response()->json($user);
     }
@@ -389,45 +363,26 @@ class UserController extends Controller
 
     public function show_customer_by_id($id)
     {
-        $id = $this->tenantCompanyId() ?? $id;
         $user = DB::select('SELECT * FROM customers WHERE company_id = ? and active =1', [$id]);
         return response()->json($user);
     }
     public function show_customer($id)
     {
-        $sql = 'SELECT * FROM customers WHERE id = ?';
-        $bindings = [$id];
-        if ($this->tenantCompanyId() !== null) {
-            $sql .= ' AND company_id = ?';
-            $bindings[] = $this->tenantCompanyId();
-        }
-        $user = DB::select($sql, $bindings);
+        $user = DB::select('SELECT * FROM customers WHERE id = ?', [$id]);
         return response()->json($user);
     }
 
     public function show_customer_by_bu_id($id)
     {
-        $sql = 'SELECT * FROM customers WHERE bu_id = ? and active =1';
-        $bindings = [$id];
-        if ($this->tenantCompanyId() !== null) {
-            $sql .= ' AND company_id = ?';
-            $bindings[] = $this->tenantCompanyId();
-        }
-        $user = DB::select($sql, $bindings);
+        $user = DB::select('SELECT * FROM customers WHERE bu_id = ? and active =1', [$id]);
         return response()->json($user);
     }
     public function show_user_des($id)
     {
-        $sql = 'SELECT u.*,d.title as designations FROM `users` u
+        $user = DB::select('SELECT u.*,d.title as designations FROM `users` u
         JOIN designations d
         ON u.designation_id = d.id
-        WHERE u.id=?';
-        $bindings = [$id];
-        if ($this->tenantCompanyId() !== null) {
-            $sql .= ' AND u.company_id = ?';
-            $bindings[] = $this->tenantCompanyId();
-        }
-        $user = DB::select($sql, $bindings);
+        WHERE u.id=?', [$id]);
         return response()->json($user);
     }
 
@@ -438,9 +393,11 @@ class UserController extends Controller
             'active' => 'required|in:0,1',
         ]);
 
-        $this->tenantUsers()->where('id', $request->id)->update([
-            'active' => $request->active,
-        ]);
+        DB::table('users')
+            ->where('id', $request->id)
+            ->update([
+                'active' => $request->active,
+            ]);
 
         return response()->json([
             'success' => true,
@@ -451,17 +408,16 @@ class UserController extends Controller
     public function updatecusstatus(Request $request)
     {
         $data = $request->all();
-        $query = DB::table('customers')->where('id', $data['id']);
-        if ($this->tenantCompanyId() !== null) {
-            $query->where('company_id', $this->tenantCompanyId());
-        }
-        $query->update(['active' => $data['active']]);
+        DB::update('UPDATE customers SET active = ? WHERE id = ?', [
+            $data['active'],
+            $data['id'],
+
+        ]);
         return response()->json(['message' => 'Type status updated successfully']);
     }
     
     public function companyprofile($id)
     {
-            $id = $this->tenantCompanyId() ?? $id;
        
       $company=  DB::select('SELECT 
       c.*,
@@ -518,25 +474,6 @@ class UserController extends Controller
       u.company_id;
   ',[$id,$id]);
         return response()->json(['response' => $company]);
-    }
-
-    private function tenantCompanyId()
-    {
-        $request = app('request');
-
-        return $request->attributes->get('tenant_platform_admin')
-            ? null
-            : $request->attributes->get('tenant_company_id');
-    }
-
-    private function tenantUsers()
-    {
-        $query = DB::table('users');
-        if ($this->tenantCompanyId() !== null) {
-            $query->where('company_id', $this->tenantCompanyId());
-        }
-
-        return $query;
     }
 }
 

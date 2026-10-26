@@ -1081,7 +1081,7 @@
                 btn.disabled = true;
                 btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Creating...';
 
-                const response = await fetch(@json(url('/api/tickets')), {
+                const response = await fetch('http://127.0.0.1:8000/api/proxy?url=http://3.137.76.254/Service-Manager-main-Work/public/api/tickets', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',

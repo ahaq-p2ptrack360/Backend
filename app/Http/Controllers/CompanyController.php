@@ -5,7 +5,6 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 use Mail;
 
@@ -13,11 +12,7 @@ class CompanyController extends Controller
 {
     public function index()
     {
-        $query = DB::table('company')->where('active', 1);
-        if ((int) Auth::user()->company_id !== 0) {
-            $query->where('id', Auth::user()->company_id);
-        }
-        $companies = $query->get();
+        $companies = DB::select('SELECT * FROM company where active=1');
         
         foreach ($companies as $company) {
             if ($company->profile && $company->profile !== 'null' && trim($company->profile) !== '') {
@@ -34,10 +29,6 @@ class CompanyController extends Controller
 
     public function store(Request $request)
     {
-        if ((int) Auth::user()->company_id !== 0) {
-            return response()->json(['error' => 'Forbidden'], 403);
-        }
-
         $data = $request->all();
     
         \Log::info('Create Company Data:', $data);
@@ -217,9 +208,6 @@ class CompanyController extends Controller
     public function show($id)
     {
         try {
-            if (!$this->canAccessCompany($id)) {
-                return response()->json(['error' => 'Forbidden'], 403);
-            }
             $companies = DB::select('SELECT * FROM company WHERE id = ?', [$id]);
     
             if (empty($companies)) {
@@ -262,10 +250,6 @@ class CompanyController extends Controller
 
     public function update(Request $request, $id)
     {
-        if (!$this->canAccessCompany($id)) {
-            return response()->json(['error' => 'Forbidden'], 403);
-        }
-
         $data = $request->all();
         
         \Log::info('Update Request Data:', array_merge($data, [
@@ -432,17 +416,11 @@ class CompanyController extends Controller
 
     public function destroy($id)
     {
-        if (!$this->canAccessCompany($id)) {
-            return response()->json(['error' => 'Forbidden'], 403);
-        }
         DB::delete('DELETE FROM company WHERE id = ?', [$id]);
         return response()->json(['message' => 'Company deleted successfully']);
     }
     public function company_profile($id)
     {
-        if (!$this->canAccessCompany($id)) {
-            return response()->json(['error' => 'Forbidden'], 403);
-        }
         $company_profile = DB::select('SELECT c.*, d.title as domain, sp.title as subscription
         FROM `company` c
         JOIN `domains` d ON c.domain_id = d.id
@@ -465,10 +443,6 @@ class CompanyController extends Controller
     public function com_pro_update(Request $request)
     {
         $data = $request->all();
-        if (!$this->canAccessCompany($data['id'] ?? null)) {
-            return response()->json(['error' => 'Forbidden'], 403);
-        }
-
         if ($request->hasFile('profile')) {
             $profilePath = $request->file('profile')->store('documents', 'public');
         } else {
@@ -564,10 +538,6 @@ class CompanyController extends Controller
         'active' => 'required|in:0,1'
     ]);
 
-    if (!$this->canAccessCompany($request->id)) {
-        return response()->json(['error' => 'Forbidden'], 403);
-    }
-
     DB::table('company')
         ->where('id', $request->id)
         ->update([
@@ -579,13 +549,6 @@ class CompanyController extends Controller
         'message' => 'Company status updated successfully'
     ]);
 }
-
-    private function canAccessCompany($companyId)
-    {
-        $user = Auth::user();
-
-        return $user && ((int) $user->company_id === 0 || (int) $user->company_id === (int) $companyId);
-    }
 
 
 }

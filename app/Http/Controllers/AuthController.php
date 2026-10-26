@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Mail\OtpMail;
-use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -75,30 +74,41 @@ class AuthController extends Controller
             return response()->json(['error' => 'Validation failed'], 422);
         }
 
-        // The stored hash is required to verify the submitted password. Keep
-        // this lookup narrow and never serialize the model into the response.
-        $user = User::query()
-            ->select(['id', 'name', 'email', 'password', 'phone', 'company_id', 'bu_id'])
-            ->where('email', $request->email)
-            ->first();
+        $user = DB::table('users')->where('email', $request->email)->first();
 
         if (!$user || !Hash::check($request->password, $user->password)) {
             return response()->json(['error' => 'Invalid credentials'], 401);
         }
 
-        $token = $user->createToken('app')->plainTextToken;
+        // Generate API token if needed
+        // // $token = $user->createToken('api-token')->plainTextToken;
+        // $status = $user->status;
+        // // dd()
+        // if ($status !== "0") {
+        //     // Auth::logout(); // Logout user
+        //     // dd("First logout from the last device");
+        //     return redirect()->route('login')->with(['error' => 'logout from previous  device']);
+        // } else {
 
-        return response()->json(array_merge(
-            [
-                'id' => $user->id,
-                'name' => $user->name,
-                'email' => $user->email,
-                'phone' => $user->phone,
-                'company_id' => $user->company_id,
-                'bu_id' => $user->bu_id,
-            ],
-            ['token' => $token, 'token_type' => 'Bearer']
-        ));
+        //     // DB::table('users')->where('id', $user->id)->update(['status' => 1]);
+        //     //
+        //     $token = bin2hex(random_bytes(16)); // You can adjust the length as needed
+
+        //     // Store the SSO token in the database
+        //     DB::update('UPDATE users SET sso_token = ? , status = "1" where id = ? ', [
+        //         $token, auth()->user()->id]);
+        //     // auth()->user()->update(['sso_token' => $token]);
+
+        //     // dd('authenticated method called'.auth()->user()->id);
+
+        //     // Set the token as a cookie in the user's browser
+        //     return redirect('/index')->cookie('sso_token', $token, 0, '/', '', false, true);
+        // }
+        
+        else
+        {
+            return response()->json($user);
+        }
     }
 
     public function send_otp(Request $request)

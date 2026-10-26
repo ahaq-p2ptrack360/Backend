@@ -39,13 +39,7 @@ use App\Http\Controllers\BillingController;
 |
 */
 
-Route::post('login', [AuthController::class, 'login2'])->name('login-custom');
-Route::get('forgot_pass/{email}', [UserController::class, 'forgot_password_get']);
-Route::get('reset/{email}', [UserController::class, 'reset_password']);
-Route::get('sendbasicemail/{email}/{username}', [MailController::class, 'basic_email']);
-
-Route::middleware(['auth:sanctum', 'tenant.context'])->group(function () {
-Route::get('/user', function (Request $request) {
+Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
 });
 // Route::post('types', [TypeController::class, 'store']);
@@ -134,6 +128,9 @@ Route::get('customers/{id}', [UserController::class, 'show_customer_by_id']);
 Route::get('show_customer/{id}', [UserController::class, 'show_customer']);
 Route::get('users/{id}', [UserController::class, 'show']);
 Route::get('users/company/{id}', [UserController::class, 'companywise']);
+Route::get('forgot_pass/{email}', [UserController::class, 'forgot_password_get']);
+Route::get('reset/{email}', [UserController::class, 'reset_password']);
+
 Route::post('users/profile_update', [UserController::class, 'profile_update']);
 Route::post('users/{id}', [UserController::class, 'update']);
 Route::delete('users/{id}', [UserController::class, 'destroy']);
@@ -203,6 +200,7 @@ Route::post('domain_data', [DomainController::class, 'domain_field_datastore']);
 
 
 
+Route::post('login', [AuthController::class, 'login2'])->name('login-custom');
 Route::post('logout/{id}', [DashboardController::class, 'logout'])->name('logout.test');
 
 Route::get('designations', [DesignationController::class, 'index']);
@@ -261,6 +259,7 @@ Route::post('companies/{id}/status',  [CompanyController::class, 'updatecompstat
 Route::get('/companies/profile-image/{filename}', [CompanyController::class, 'serveProfileImage']);
 
 
+Route::get('sendbasicemail/{email}/{username}',[MailController::class, 'basic_email']);
 Route::get('profile/{filename}', [UserController::class,'getProfilePicture']);
 
 // Route::get('notifications',  [NotificationController::class, 'index']);
@@ -356,7 +355,5 @@ Route::post('updatecusstatus', [UserController::class, 'updatecusstatus']);
 Route::post('updatedesigstatus', [DesignationController::class, 'updatedesigstatus']);
 Route::post('ticket_reply', [TicketController::class, 'ticket_reply']);
 Route::get('get_ticket_reply/{id}', [TicketController::class, 'get_ticket_reply']);
-
-});
 
 

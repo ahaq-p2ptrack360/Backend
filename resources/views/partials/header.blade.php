@@ -204,9 +204,9 @@
 
                 <div class="dropdown-divider"></div>
             </div>
-                <a class="dropdown-item" href="{{ url('/logout') }}" onclick="event.preventDefault();
+            <a class="dropdown-item" href="api/logout/{{ Auth::user()->id }}" onclick="event.preventDefault();
                     document.getElementById('logout-form').submit();sessionStorage.clear();"><i class="mdi mdi-logout text-muted font-size-16 align-middle me-2"></i> <span class="align-middle">Logout</span></a>
-                <form id="logout-form" action="{{ url('/logout') }}" method="POST" class="d-none">
+            <form id="logout-form" action="api/logout/{{ Auth::user()->id }}" method="POST" class="d-none">
             <!-- <input type="hidden" name="_token" value="YOUR_CSRF_TOKEN_VALUE"> -->
     @csrf
 </form>

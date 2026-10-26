@@ -18,7 +18,6 @@ class InvoiceController extends Controller
     public function index($companyId)
     {
         try {
-            $companyId = $this->tenantCompanyId($companyId);
             $invoices = Invoice::where('company_id', $companyId)
                 ->orderBy('invoice_month', 'desc')
                 ->orderBy('created_at', 'desc')
@@ -64,11 +63,6 @@ class InvoiceController extends Controller
 
     public function store(Request $request)
     {
-        $request->merge([
-            'company_id' => $this->tenantCompanyId($request->input('company_id')),
-            'generated_by' => $request->user()->id,
-        ]);
-
         $validator = Validator::make($request->all(), [
             'company_id' => 'required|integer|exists:company,id',
             'subscription_id' => 'nullable|integer',
@@ -311,7 +305,6 @@ class InvoiceController extends Controller
                 'terms',
                 'invoice_month',
             ]);
-            unset($updateData['company_id'], $updateData['generated_by']);
 
             // Handle items JSON
             if ($request->has('items')) {
@@ -343,15 +336,6 @@ class InvoiceController extends Controller
                 'error' => $e->getMessage(),
             ], 500);
         }
-    }
-
-    private function tenantCompanyId($requestedCompanyId)
-    {
-        $user = request()->user();
-
-        return $user && (int) $user->company_id !== 0
-            ? $user->company_id
-            : $requestedCompanyId;
     }
 
     /**

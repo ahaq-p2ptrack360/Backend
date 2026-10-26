@@ -94,12 +94,8 @@ class LoginController extends Controller
             // Clear login attempts
             $this->clearLoginAttempts($request);
 
-            $apiToken = Auth::user()->createToken('portal');
-
             // Prepare response with cookies
             $response = $this->sendLoginResponse($request);
-            $request->session()->put('api_bearer_token', $apiToken->plainTextToken);
-            $request->session()->put('api_token_id', $apiToken->accessToken->getKey());
             
             // Set cookies
             $response->cookie('user_id', encrypt($newLoggedInUserId), 60 * 24, '/', null, true, true);
@@ -137,12 +133,6 @@ class LoginController extends Controller
         }
         
         $currentUserId = $currentUser->id;
-
-        $apiTokenId = $request->session()->pull('api_token_id');
-        $request->session()->forget('api_bearer_token');
-        if ($apiTokenId) {
-            $currentUser->tokens()->whereKey($apiTokenId)->delete();
-        }
         
         Log::info('LOGOUT DATA BEFORE', [
             'current_user_id' => $currentUserId,
@@ -167,8 +157,6 @@ class LoginController extends Controller
         
         // Store current user ID as previous user for next login
         $response->cookie('previous_user_id', encrypt($currentUserId), 60 * 24, '/', null, true, true);
-        $response->withCookie(cookie()->forget('user_id'));
-        $response->withCookie(cookie()->forget('auth_token'));
         
         Log::info('✅ LOGOUT COMPLETE - PREVIOUS USER ID STORED IN COOKIE', [
             'user_id_for_next_login' => $currentUserId

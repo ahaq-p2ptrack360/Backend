@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-use App\Models\Concerns\BelongsToTenant;
 use \DateTimeInterface;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
@@ -10,7 +9,6 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Qoutation extends Model 
 {
-    use BelongsToTenant;
     use SoftDeletes;
 
     public $table = 'qoutations';

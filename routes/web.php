@@ -36,7 +36,8 @@ Route::middleware(['auth'])->group(function () {
 //     dd("Test route reached!"); // Debugging
 // });
 
-Route::middleware(['auth', 'tenant.context'])->group(function () {
+
+Route::middleware(['auth'])->group(function () {
     // Route::get('/index', function () {
     //     return view('dashboard/index2');
     // });
@@ -129,9 +130,6 @@ Route::middleware(['auth', 'tenant.context'])->group(function () {
     // Route::get('/ticket_filter', function () {
     //     return view('Tickets/ticket_filter');
     // });
-
-    Route::get('/tickets/{id}', [App\Http\Controllers\TicketController::class, 'showTicket'])->name('tickets.show');
-
   
     Route::get('/home', [App\Http\Controllers\HomeController::class, 'index'])->name('home');
 });

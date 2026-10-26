@@ -63,7 +63,9 @@ class GroupMemberController extends Controller
     }
     public function u_group_company($id)
     {
-        $groupMembers = DB::select('SELECT * FROM u_group WHERE company_id = ?', [$id]);
+        $groupMembers = DB::select('SELECT *
+        FROM u_group
+        WHERE company_id = '.$id.'' );
         return response()->json($groupMembers);
     }
     public function store(Request $request)
